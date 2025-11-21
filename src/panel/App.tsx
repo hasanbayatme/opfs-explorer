@@ -179,6 +179,26 @@ function App() {
       }
   };
 
+  const saveFile = useCallback(async () => {
+    if (!selectedFile || selectedFile.kind !== 'file') return;
+    try {
+      await opfsApi.write(selectedFile.path, fileContent);
+      setInitialContent(fileContent);
+      addToast('success', 'File saved');
+    } catch (err) {
+      addToast('error', `Failed to save: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [selectedFile, fileContent, addToast]);
+
+  const handleDownload = useCallback(async (path: string) => {
+      try {
+          await opfsApi.download(path);
+          addToast('success', 'Download started');
+      } catch (err) {
+          addToast('error', `Download failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+  }, [addToast]);
+
   // Keyboard shortcut for Save (Ctrl/Cmd + S)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -216,26 +236,6 @@ function App() {
         setFileContent('');
     }
   };
-
-  const saveFile = useCallback(async () => {
-    if (!selectedFile || selectedFile.kind !== 'file') return;
-    try {
-      await opfsApi.write(selectedFile.path, fileContent);
-      setInitialContent(fileContent);
-      addToast('success', 'File saved');
-    } catch (err) {
-      addToast('error', `Failed to save: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }, [selectedFile, fileContent, addToast]);
-
-  const handleDownload = useCallback(async (path: string) => {
-      try {
-          await opfsApi.download(path);
-          addToast('success', 'Download started');
-      } catch (err) {
-          addToast('error', `Download failed: ${err instanceof Error ? err.message : String(err)}`);
-      }
-  }, [addToast]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, entry: FileEntry) => {
     e.preventDefault();
