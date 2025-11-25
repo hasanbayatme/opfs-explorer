@@ -10,21 +10,17 @@ type DeepPartial<T> = T extends (...args: any[]) => any
     }
   : T;
 
-// Mock Chrome API
+// Mock Chrome API for inspectedWindow.eval
 const mockChrome = {
   devtools: {
     inspectedWindow: {
       tabId: 123,
+      eval: vi.fn(),
+      reload: vi.fn(),
     },
-  },
-  tabs: {
-    sendMessage: vi.fn(),
   },
   runtime: {
     lastError: undefined,
-    onMessage: {
-      addListener: vi.fn(),
-    },
   },
 } satisfies DeepPartial<typeof chrome>;
 

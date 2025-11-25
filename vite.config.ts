@@ -10,7 +10,6 @@ export default defineConfig({
       input: {
         panel: resolve(__dirname, 'panel.html'),
         devtools: resolve(__dirname, 'devtools.html'),
-        content: resolve(__dirname, 'src/content/index.ts'),
       },
       output: {
         entryFileNames: () => {

@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Release Workflow**: Now supports both tag-triggered and manual releases with test mode
 
+### Security
+
+- **Removed Content Scripts**: Refactored to use `chrome.devtools.inspectedWindow.eval()` instead of content scripts
+- **No Host Permissions**: Removed `<all_urls>` content script injection - extension no longer injects into web pages
+- **Minimal Permissions**: Now only requires `clipboardWrite` permission for copy functionality
+
 ## [0.0.3] - 2025-11-25
 
 ### Added

@@ -63,7 +63,7 @@ This extension bridges that gap by adding a native "OPFS Explorer" panel to your
 3.  Look for the **"OPFS Explorer"** tab in the top panel (you may need to click the `>>` overflow menu).
 4.  Navigate the file tree, right-click items for options, or drag and drop files to manage them.
 
-> **Note:** If the panel shows "Connection Lost", simply click the **Reload Page** button in the sidebar to reinject the inspection scripts.
+> **Note:** OPFS is only available on secure contexts (HTTPS or localhost). If you see an error, ensure you're on a secure origin.
 
 ## 💻 Development
 
@@ -81,9 +81,9 @@ src/
 ├── devtools/     # Entry point for creating the DevTools panel
 ├── panel/        # Main React application (UI)
 │   ├── components/  # TreeItem, Editor, Modal, etc.
-│   └── api.ts       # Messaging bridge to content script
-├── content/      # Content script injected into the inspected page (accesses OPFS)
-└── assets/       # Static assets
+│   └── api.ts       # OPFS operations via inspectedWindow.eval()
+├── test/         # Unit tests
+└── types.ts      # TypeScript type definitions
 ```
 
 ### Commands
@@ -97,7 +97,8 @@ src/
 *   **No Data Collection:** No telemetry, analytics, or file data is ever sent to external servers.
 *   **Minimal Permissions:**
     *   `clipboardWrite`: To allow "Copy Path" functionality.
-*   **Content Script:** Injected only to access the page's OPFS via the standard File System API.
+*   **No Content Scripts:** Uses DevTools' native `inspectedWindow.eval()` API - no code is injected into web pages.
+*   **No Host Permissions:** Does not require access to any websites - operates only through the DevTools panel.
 
 ## 📄 License
 
