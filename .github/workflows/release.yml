@@ -4,6 +4,17 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.0.3)'
+        required: true
+        type: string
+      skip_release:
+        description: 'Skip creating GitHub release (useful for testing CRX signing)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -32,7 +43,12 @@ jobs:
       - name: Package Extension (ZIP)
         run: |
           mkdir -p releases
-          VERSION=${GITHUB_REF#refs/tags/v}
+          # Use input version for manual runs, extract from tag otherwise
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
           ZIP_NAME=opfs-explorer-v${VERSION}.zip
 
           cd dist
@@ -50,7 +66,15 @@ jobs:
           crxFilePath: releases/opfs-explorer-v${{ env.VERSION }}.crx
           privateKey: ${{ env.CRX_PRIVATE_KEY }}
 
+      - name: Upload Artifacts
+        if: inputs.skip_release == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-v${{ env.VERSION }}
+          path: releases/
+
       - name: Generate Changelog
+        if: inputs.skip_release != true
         id: changelog
         uses: mikepenz/release-changelog-builder-action@v4
         with:
@@ -59,6 +83,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
+        if: inputs.skip_release != true
         uses: softprops/action-gh-release@v1
         with:
           body: |
