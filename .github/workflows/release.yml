@@ -11,6 +11,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      CRX_PRIVATE_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -41,12 +43,12 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Sign Extension (CRX)
-        if: ${{ secrets.CRX_PRIVATE_KEY != '' }}
+        if: env.CRX_PRIVATE_KEY != ''
         uses: cardinalby/webext-buildtools-chrome-crx-action@v2
         with:
           zipFilePath: ${{ env.ZIP_PATH }}
           crxFilePath: releases/opfs-explorer-v${{ env.VERSION }}.crx
-          privateKey: ${{ secrets.CRX_PRIVATE_KEY }}
+          privateKey: ${{ env.CRX_PRIVATE_KEY }}
 
       - name: Generate Changelog
         id: changelog
