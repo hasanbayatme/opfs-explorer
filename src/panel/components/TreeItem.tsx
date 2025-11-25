@@ -1,7 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ChevronRight, ChevronDown, Folder, FileJson, FileCode, FileText, Image } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FileJson, FileCode, FileText, Image, File, FileType, Database } from 'lucide-react';
 import { opfsApi } from '../api';
 import type { FileEntry } from '../api';
+
+// Helper to format file sizes compactly
+function formatSize(bytes?: number): string {
+  if (bytes === undefined || bytes === 0) return '';
+  const k = 1024;
+  if (bytes < k) return `${bytes}B`;
+  if (bytes < k * k) return `${(bytes / k).toFixed(0)}K`;
+  return `${(bytes / (k * k)).toFixed(1)}M`;
+}
 
 interface TreeItemProps {
   entry: FileEntry;
@@ -12,15 +21,17 @@ interface TreeItemProps {
   onDrop?: (e: React.DragEvent, targetEntry: FileEntry) => void;
   onDragStart?: (e: React.DragEvent, entry: FileEntry) => void;
   refreshTrigger?: number;
+  expandedPaths: Set<string>;
+  onToggleExpand: (path: string) => void;
 }
 
-export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMenu, onDrop, onDragStart, refreshTrigger }: TreeItemProps) {
-  const [expanded, setExpanded] = useState(false);
+export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMenu, onDrop, onDragStart, refreshTrigger, expandedPaths, onToggleExpand }: TreeItemProps) {
   const [children, setChildren] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
+  const expanded = entry.kind === 'directory' && expandedPaths.has(entry.path);
   const isSelected = selectedPath === entry.path;
   const paddingLeft = `${depth * 12 + 4}px`;
 
@@ -46,11 +57,9 @@ export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMe
     e.stopPropagation();
     onSelect(entry); // Also select on toggle click
 
-    if (entry.kind === 'file') {
-        return;
+    if (entry.kind === 'directory') {
+        onToggleExpand(entry.path);
     }
-
-    setExpanded(prev => !prev);
   };
 
   const handleRightClick = (e: React.MouseEvent) => {
@@ -93,18 +102,25 @@ export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMe
 
   const getIcon = () => {
     if (entry.kind === 'directory') {
-        if (expanded) return <Folder size={14} className="text-dt-text-secondary fill-blue-400/20" />;
-        return <Folder size={14} className="text-dt-text-secondary" />;
+        if (expanded) return <Folder size={14} className="text-dt-text-secondary fill-blue-400/20" aria-hidden="true" />;
+        return <Folder size={14} className="text-dt-text-secondary" aria-hidden="true" />;
     }
-    if (entry.name.endsWith('.json')) return <FileJson size={14} className="text-yellow-400" />;
-    if (entry.name.endsWith('.js') || entry.name.endsWith('.ts')) return <FileCode size={14} className="text-blue-400" />;
-    if (entry.name.match(/\.(jpg|png|gif|svg)$/)) return <Image size={14} className="text-purple-400" />;
-    return <FileText size={14} className="text-gray-400" />;
+    const name = entry.name.toLowerCase();
+    if (name.endsWith('.json')) return <FileJson size={14} className="text-yellow-400" aria-hidden="true" />;
+    if (name.endsWith('.js') || name.endsWith('.jsx')) return <FileCode size={14} className="text-yellow-500" aria-hidden="true" />;
+    if (name.endsWith('.ts') || name.endsWith('.tsx')) return <FileCode size={14} className="text-blue-400" aria-hidden="true" />;
+    if (name.endsWith('.css') || name.endsWith('.scss') || name.endsWith('.sass')) return <FileType size={14} className="text-pink-400" aria-hidden="true" />;
+    if (name.endsWith('.html') || name.endsWith('.htm')) return <FileCode size={14} className="text-orange-400" aria-hidden="true" />;
+    if (name.match(/\.(jpg|jpeg|png|gif|svg|webp|ico|bmp)$/)) return <Image size={14} className="text-purple-400" aria-hidden="true" />;
+    if (name.match(/\.(md|markdown|txt|log)$/)) return <FileText size={14} className="text-gray-400" aria-hidden="true" />;
+    if (name.match(/\.(db|sqlite|sqlite3)$/)) return <Database size={14} className="text-green-400" aria-hidden="true" />;
+    if (name.match(/\.(wasm)$/)) return <File size={14} className="text-purple-500" aria-hidden="true" />;
+    return <File size={14} className="text-gray-400" aria-hidden="true" />;
   };
 
   return (
-    <div>
-      <div 
+    <div role="treeitem" aria-expanded={entry.kind === 'directory' ? expanded : undefined} aria-selected={isSelected}>
+      <div
         draggable
         onDragStart={handleDragStart}
         className={`
@@ -119,6 +135,14 @@ export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMe
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleToggle(e as unknown as React.MouseEvent);
+          }
+        }}
+        aria-label={`${entry.kind === 'directory' ? 'Folder' : 'File'}: ${entry.name}${entry.size ? `, ${formatSize(entry.size)}` : ''}`}
       >
         <span className="mr-1 w-4 flex justify-center shrink-0">
           {entry.kind === 'directory' && (
@@ -131,8 +155,14 @@ export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMe
         <span className="mr-1.5 shrink-0">
             {getIcon()}
         </span>
-        
-        <span className="truncate text-[11px] leading-tight">{entry.name}</span>
+
+        <span className="truncate text-[11px] leading-tight flex-1">{entry.name}</span>
+
+        {entry.kind === 'file' && entry.size !== undefined && (
+          <span className="text-[9px] text-dt-text-secondary/60 ml-1 shrink-0 tabular-nums">
+            {formatSize(entry.size)}
+          </span>
+        )}
       </div>
 
       {error && expanded && (
@@ -140,21 +170,23 @@ export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMe
       )}
 
       {expanded && (
-        <div>
+        <div role="group">
           {loading ? (
-             <div className="pl-8 text-gray-400 italic text-[10px]">Loading...</div>
+             <div className="pl-8 text-gray-400 italic text-[10px]" role="status">Loading...</div>
           ) : (
             children.map(child => (
-              <TreeItem 
-                key={child.path} 
-                entry={child} 
-                depth={depth + 1} 
+              <TreeItem
+                key={child.path}
+                entry={child}
+                depth={depth + 1}
                 onSelect={onSelect}
                 selectedPath={selectedPath}
                 onContextMenu={onContextMenu}
                 onDrop={onDrop}
                 onDragStart={onDragStart}
                 refreshTrigger={refreshTrigger}
+                expandedPaths={expandedPaths}
+                onToggleExpand={onToggleExpand}
               />
             ))
           )}

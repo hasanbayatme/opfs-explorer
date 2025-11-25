@@ -20,18 +20,27 @@ This extension bridges that gap by adding a native "OPFS Explorer" panel to your
 
 ## ✨ Features
 
-*   **📂 Visual File Tree:** Browse your directory structure with a familiar, collapsible folder interface.
+*   **📂 Visual File Tree:** Browse your directory structure with a familiar, collapsible folder interface. File sizes displayed inline.
 *   **📝 Built-in Code Editor:** View and edit files instantly. Supports syntax highlighting for **JSON, JavaScript, TypeScript, HTML, CSS**, and plain text.
+*   **🖼️ Image Preview:** View images directly with zoom (25%-400%), rotate, and reset controls. Supports PNG, JPG, GIF, WebP, SVG, and more.
+*   **📑 Markdown Preview:** Preview markdown files with rendered formatting. Toggle between preview and edit modes.
+*   **🔍 Search & Filter:** Quickly find files with Ctrl+F search functionality.
+*   **📊 Storage Statistics:** View OPFS storage usage with a visual progress bar showing used/available space.
 *   **🖱️ Drag & Drop Magic:**
     *   **Upload:** Drag files from your computer directly into the panel to upload them.
     *   **Organize:** Drag files and folders *inside* the tree to move/reparent them.
+    *   **Conflict Resolution:** Choose to overwrite, rename, or skip when uploading duplicate files.
 *   **⚡ Full CRUD Operations:**
     *   **Create** files and folders.
     *   **Rename** files/folders.
     *   **Delete** recursively.
 *   **⬇️ Download Support:** Export files from the hidden OPFS to your local machine with a single click.
 *   **🛡️ Binary Safety:** Intelligent detection of large or binary files (like SQLite databases) with a "Download Only" safety mode to prevent freezing.
+*   **⌨️ Keyboard Shortcuts:** Comprehensive keyboard support including Ctrl+S (save), Ctrl+F (search), Ctrl+B (toggle sidebar), and more.
+*   **↔️ Resizable Sidebar:** Drag to resize the file tree panel. Width persists across sessions.
+*   **🧭 Clickable Breadcrumbs:** Navigate folder hierarchy by clicking path segments.
 *   **🌗 Theme Aware:** Automatically adapts to Chrome DevTools' Light and Dark themes.
+*   **♿ Accessible:** Full ARIA labels, keyboard navigation, and screen reader support.
 
 ## 📦 Installation
 
@@ -86,9 +95,9 @@ src/
 
 *   **Local Execution:** This extension runs entirely within your browser's local sandbox.
 *   **No Data Collection:** No telemetry, analytics, or file data is ever sent to external servers.
-*   **Permissions:**
-    *   `activeTab`: To communicate with the OPFS of the specific page you are inspecting.
+*   **Minimal Permissions:**
     *   `clipboardWrite`: To allow "Copy Path" functionality.
+*   **Content Script:** Injected only to access the page's OPFS via the standard File System API.
 
 ## 📄 License
 

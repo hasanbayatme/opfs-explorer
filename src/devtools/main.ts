@@ -1,4 +1,3 @@
-
 try {
   chrome.devtools.panels.create(
     "OPFS Explorer",
