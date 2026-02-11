@@ -42,6 +42,23 @@ export function ResizeHandle({ onResize, minWidth = 150, maxWidth = 500, initial
     };
   }, [isDragging, minWidth, maxWidth, onResize]);
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    const step = e.shiftKey ? 50 : 10;
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      onResize(Math.max(minWidth, initialWidth - step));
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      onResize(Math.min(maxWidth, initialWidth + step));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      onResize(minWidth);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      onResize(maxWidth);
+    }
+  };
+
   return (
     <div
       className={`
@@ -55,14 +72,9 @@ export function ResizeHandle({ onResize, minWidth = 150, maxWidth = 500, initial
       aria-valuenow={initialWidth}
       aria-valuemin={minWidth}
       aria-valuemax={maxWidth}
+      aria-label="Resize sidebar. Use left/right arrow keys to adjust width."
       tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'ArrowLeft') {
-          onResize(Math.max(minWidth, initialWidth - 10));
-        } else if (e.key === 'ArrowRight') {
-          onResize(Math.min(maxWidth, initialWidth + 10));
-        }
-      }}
+      onKeyDown={handleKeyDown}
     >
       {/* Visual indicator */}
       <div className={`

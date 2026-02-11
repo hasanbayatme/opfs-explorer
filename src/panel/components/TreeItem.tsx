@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronRight, ChevronDown, Folder, FileJson, FileCode, FileText, Image, File, FileType, Database } from 'lucide-react';
 import { opfsApi } from '../api';
 import type { FileEntry } from '../api';
@@ -15,25 +15,50 @@ function formatSize(bytes?: number): string {
 interface TreeItemProps {
   entry: FileEntry;
   depth?: number;
-  onSelect: (entry: FileEntry) => void;
-  selectedPath: string | null;
+  onSelect: (entry: FileEntry, event?: React.MouseEvent | React.KeyboardEvent) => void;
+  selectedPaths: Set<string>;
+  focusedPath: string | null;
   onContextMenu: (e: React.MouseEvent, entry: FileEntry) => void;
   onDrop?: (e: React.DragEvent, targetEntry: FileEntry) => void;
   onDragStart?: (e: React.DragEvent, entry: FileEntry) => void;
   refreshTrigger?: number;
   expandedPaths: Set<string>;
   onToggleExpand: (path: string) => void;
+  onFocusPath?: (path: string) => void;
 }
 
-export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMenu, onDrop, onDragStart, refreshTrigger, expandedPaths, onToggleExpand }: TreeItemProps) {
+export function TreeItem({
+  entry,
+  depth = 0,
+  onSelect,
+  selectedPaths,
+  focusedPath,
+  onContextMenu,
+  onDrop,
+  onDragStart,
+  refreshTrigger,
+  expandedPaths,
+  onToggleExpand,
+  onFocusPath,
+}: TreeItemProps) {
   const [children, setChildren] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const itemRef = useRef<HTMLDivElement>(null);
 
   const expanded = entry.kind === 'directory' && expandedPaths.has(entry.path);
-  const isSelected = selectedPath === entry.path;
+  const isSelected = selectedPaths.has(entry.path);
+  const isFocused = focusedPath === entry.path;
+  const isMultiSelect = selectedPaths.size > 1;
   const paddingLeft = `${depth * 12 + 4}px`;
+
+  // Scroll into view when focused via keyboard
+  useEffect(() => {
+    if (isFocused && itemRef.current) {
+      itemRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [isFocused]);
 
   const fetchChildren = useCallback(async () => {
       setLoading(true);
@@ -53,24 +78,69 @@ export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMe
       }
   }, [expanded, refreshTrigger, fetchChildren]);
 
-  const handleToggle = async (e: React.MouseEvent) => {
+  const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onSelect(entry); // Also select on toggle click
 
-    if (entry.kind === 'directory') {
-        onToggleExpand(entry.path);
+    // If clicking on a directory without modifier keys, toggle expansion
+    if (entry.kind === 'directory' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      onToggleExpand(entry.path);
     }
+
+    // Always pass event to parent for selection handling
+    onSelect(entry, e);
+    onFocusPath?.(entry.path);
   };
 
   const handleRightClick = (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      onSelect(entry); // Auto select on right click
+      // If right-clicking on an unselected item, select it
+      if (!isSelected) {
+        onSelect(entry, e);
+      }
+      onFocusPath?.(entry.path);
       onContextMenu(e, entry);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelect(entry, e);
+    } else if (e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      // Space toggles selection (like Ctrl+Click)
+      const syntheticEvent = { ...e, ctrlKey: true } as React.KeyboardEvent;
+      onSelect(entry, syntheticEvent);
+    } else if (e.key === 'ArrowRight' && entry.kind === 'directory') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!expanded) {
+        onToggleExpand(entry.path);
+      }
+    } else if (e.key === 'ArrowLeft' && entry.kind === 'directory') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (expanded) {
+        onToggleExpand(entry.path);
+      }
+    } else if (e.key === 'F2') {
+      e.preventDefault();
+      e.stopPropagation();
+      // Trigger rename via context menu simulation
+      onContextMenu(e as unknown as React.MouseEvent, entry);
+    }
+    // Arrow Up/Down are handled by App via the tree container
   };
 
   const handleDragStart = (e: React.DragEvent) => {
       e.stopPropagation();
+      // If dragging a selected item and there are multiple selections,
+      // include all selected paths
+      if (isSelected && selectedPaths.size > 1) {
+        e.dataTransfer.setData('application/opfs-paths', JSON.stringify([...selectedPaths]));
+      }
       e.dataTransfer.setData('application/opfs-path', entry.path);
       e.dataTransfer.effectAllowed = 'move';
       if (onDragStart) onDragStart(e, entry);
@@ -119,39 +189,56 @@ export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMe
   };
 
   return (
-    <div role="treeitem" aria-expanded={entry.kind === 'directory' ? expanded : undefined} aria-selected={isSelected}>
+    <div
+      role="treeitem"
+      aria-expanded={entry.kind === 'directory' ? expanded : undefined}
+      aria-selected={isSelected}
+      aria-label={`${entry.kind === 'directory' ? 'Folder' : 'File'}: ${entry.name}${entry.size ? `, ${formatSize(entry.size)}` : ''}${isSelected && isMultiSelect ? ', selected' : ''}`}
+    >
       <div
+        ref={itemRef}
+        data-path={entry.path}
+        data-kind={entry.kind}
         draggable
         onDragStart={handleDragStart}
         className={`
-            flex items-center py-0.5 pr-2 cursor-default select-none group
+            tree-item flex items-center py-0.5 pr-2 cursor-default select-none group transition-colors
             ${isSelected ? 'bg-dt-selection text-dt-selection-text' : ''}
             ${!isSelected && !isDragOver ? 'hover:bg-dt-hover text-dt-text' : ''}
             ${isDragOver ? 'bg-blue-500/30 ring-1 ring-inset ring-blue-500 text-dt-text' : ''}
+            ${isFocused ? 'tree-item-focused' : ''}
         `}
         style={{ paddingLeft }}
-        onClick={handleToggle}
+        onClick={handleClick}
         onContextMenu={handleRightClick}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleToggle(e as unknown as React.MouseEvent);
-          }
-        }}
-        aria-label={`${entry.kind === 'directory' ? 'Folder' : 'File'}: ${entry.name}${entry.size ? `, ${formatSize(entry.size)}` : ''}`}
+        tabIndex={isFocused ? 0 : -1}
+        onKeyDown={handleKeyDown}
       >
+        {/* Multi-select checkbox indicator */}
+        {isMultiSelect && (
+          <span className={`
+            mr-1 w-3 h-3 rounded-sm border flex items-center justify-center shrink-0 transition-colors
+            ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-dt-border'}
+          `} aria-hidden="true">
+            {isSelected && (
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                <path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </span>
+        )}
+
         <span className="mr-1 w-4 flex justify-center shrink-0">
           {entry.kind === 'directory' && (
-            <button className="focus:outline-none text-dt-text-secondary hover:text-dt-text">
+            <span className="text-dt-text-secondary hover:text-dt-text" aria-hidden="true">
               {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            </button>
+            </span>
           )}
         </span>
-        
+
         <span className="mr-1.5 shrink-0">
             {getIcon()}
         </span>
@@ -166,11 +253,11 @@ export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMe
       </div>
 
       {error && expanded && (
-          <div className="ml-8 text-red-500 text-[10px]">{error}</div>
+          <div className="ml-8 text-red-500 text-[10px]" role="alert">{error}</div>
       )}
 
       {expanded && (
-        <div role="group">
+        <div role="group" aria-label={`Contents of ${entry.name}`}>
           {loading ? (
              <div className="pl-8 text-gray-400 italic text-[10px]" role="status">Loading...</div>
           ) : (
@@ -180,18 +267,20 @@ export function TreeItem({ entry, depth = 0, onSelect, selectedPath, onContextMe
                 entry={child}
                 depth={depth + 1}
                 onSelect={onSelect}
-                selectedPath={selectedPath}
+                selectedPaths={selectedPaths}
+                focusedPath={focusedPath}
                 onContextMenu={onContextMenu}
                 onDrop={onDrop}
                 onDragStart={onDragStart}
                 refreshTrigger={refreshTrigger}
                 expandedPaths={expandedPaths}
                 onToggleExpand={onToggleExpand}
+                onFocusPath={onFocusPath}
               />
             ))
           )}
           {children.length === 0 && !loading && (
-              <div className="pl-8 text-gray-400 italic text-[10px] py-1">Empty</div>
+              <div className="pl-8 text-gray-400 italic text-[10px] py-1" aria-label="Empty folder">Empty</div>
           )}
         </div>
       )}

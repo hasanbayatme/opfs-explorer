@@ -9,6 +9,7 @@
   --color-dt-hover: var(--dt-hover);
   --color-dt-selection: var(--dt-selection);
   --color-dt-selection-text: var(--dt-selection-text);
+  --color-dt-focus: var(--dt-focus);
 }
 
 :root {
@@ -21,6 +22,7 @@
   --dt-hover: #f0f0f0;
   --dt-selection: #cfe8fc;
   --dt-selection-text: #202124;
+  --dt-focus: #1a73e8;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -34,6 +36,7 @@
     --dt-hover: #292a2d;
     --dt-selection: #0d47a1;
     --dt-selection-text: #ffffff;
+    --dt-focus: #8ab4f8;
   }
 }
 
@@ -46,7 +49,44 @@ body {
   margin: 0;
 }
 
-/* Scrollbar styling to match DevTools */
+/* ============================================
+   Focus Management
+   ============================================ */
+
+/* Visible focus ring for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid var(--dt-focus);
+  outline-offset: -2px;
+  border-radius: 2px;
+}
+
+/* Remove default outline for mouse users */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Skip navigation link */
+.skip-nav {
+  position: absolute;
+  left: -9999px;
+  z-index: 999;
+  padding: 4px 8px;
+  background: var(--dt-focus);
+  color: #ffffff;
+  border: none;
+  border-radius: 0 0 4px 0;
+  font-size: 11px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.skip-nav:focus {
+  left: 0;
+  top: 0;
+}
+
+/* ============================================
+   Scrollbar styling to match DevTools
+   ============================================ */
 ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -62,4 +102,123 @@ body {
 }
 ::-webkit-scrollbar-corner {
     background: transparent;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--dt-border) transparent;
+}
+
+/* ============================================
+   Reduced Motion
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================
+   Tree Item States
+   ============================================ */
+.tree-item {
+  position: relative;
+}
+
+.tree-item-focused {
+  box-shadow: inset 0 0 0 1px var(--dt-focus);
+}
+
+/* ============================================
+   High Contrast Mode
+   ============================================ */
+@media (forced-colors: active) {
+  :root {
+    --dt-bg: Canvas;
+    --dt-surface: Canvas;
+    --dt-text: CanvasText;
+    --dt-text-secondary: CanvasText;
+    --dt-border: CanvasText;
+    --dt-hover: Highlight;
+    --dt-selection: Highlight;
+    --dt-selection-text: HighlightText;
+    --dt-focus: Highlight;
+  }
+
+  button, [role="treeitem"], [role="menuitem"] {
+    border: 1px solid transparent;
+  }
+
+  button:focus-visible, [role="treeitem"]:focus-visible, [role="menuitem"]:focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* ============================================
+   Context Menu Animations
+   ============================================ */
+@keyframes contextMenuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.context-menu-enter {
+  animation: contextMenuIn 0.1s ease-out;
+}
+
+/* ============================================
+   Toast Animations
+   ============================================ */
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.toast-enter {
+  animation: toastSlideIn 0.2s ease-out;
+}
+
+/* ============================================
+   Modal Animations
+   ============================================ */
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.modal-backdrop-enter {
+  animation: modalFadeIn 0.15s ease-out;
+}
+
+.modal-content-enter {
+  animation: modalScaleIn 0.15s ease-out;
 }
