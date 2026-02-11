@@ -1,7 +1,7 @@
 {
   "name": "opfs-explorer",
   "private": true,
-  "version": "0.0.4",
+  "version": "0.1.0",
   "description": "A browser DevTools extension to inspect, edit, and manage the Origin Private File System (OPFS)",
   "homepage": "https://github.com/hasanbayatme/opfs-explorer",
   "repository": {
