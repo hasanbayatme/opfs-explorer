@@ -1,4 +1,4 @@
-# Browser Extension Store Listing - OPFS Explorer v0.0.4
+# Browser Extension Store Listing - OPFS Explorer v0.1.0
 
 ## Published Store Links
 
@@ -29,11 +29,12 @@ OPFS Explorer - The Missing DevTools Panel for Origin Private File System
 
 The Origin Private File System (OPFS) is a powerful browser API for high-performance file storage, but browsers don't provide any way to see what's inside. OPFS Explorer fills this gap by adding a dedicated panel to Chrome DevTools.
 
-WHAT'S NEW IN v0.0.4:
-• Enhanced Security - No content scripts, no host permissions required
-• Verified CRX Support - Signed extension builds for verification
-• New Logo - Redesigned with folder, file, and magnifying glass elements
-• Improved Architecture - Uses DevTools native API for better performance
+WHAT'S NEW IN v0.1.0:
+• Multi-Selection - Ctrl+Click, Shift+Click, Ctrl+A with bulk operations
+• Keyboard Shortcuts - Ctrl+N new file, F2 rename, Delete, arrow navigation, and more
+• Full Accessibility (WCAG 2.1 AA) - Screen reader support, focus management, reduced motion
+• Enhanced Context Menus - Icons, shortcut hints, type-ahead search
+• Improved Tree Navigation - Roving tabindex, skip navigation, ARIA live announcements
 
 SECURITY HIGHLIGHTS:
 • NO host permissions - doesn't access any websites
@@ -46,13 +47,14 @@ KEY FEATURES:
 📝 Code Editor - Syntax highlighting for JSON, JS, TS, HTML, CSS
 🖼️ Image Preview - Zoom, rotate, and inspect images up to 5MB
 📑 Markdown Support - Preview or edit .md files
-🖱️ Drag & Drop - Upload files or reorganize your file structure
+✅ Multi-Selection - Ctrl+Click, Shift+Click, Ctrl+A with bulk delete/download
+🖱️ Drag & Drop - Upload files or reorganize your file structure (multi-drag)
 ⚡ Full CRUD - Create, rename, move, and delete files/folders
 ⬇️ Download Files - Export from OPFS to your local machine
 📊 Storage Stats - Monitor your OPFS quota usage
-⌨️ Keyboard Shortcuts - Ctrl+S save, Ctrl+F search, Ctrl+B sidebar
+⌨️ Keyboard Shortcuts - 20+ shortcuts with platform-aware hints in context menus
 🌗 Theme Support - Adapts to DevTools light/dark themes
-♿ Accessible - Full ARIA support and keyboard navigation
+♿ Fully Accessible - WCAG 2.1 AA with screen reader, keyboard, and high contrast support
 
 PERFECT FOR:
 • SQLite Wasm applications (sql.js, wa-sqlite, sqlite-wasm)
@@ -95,24 +97,47 @@ OPFS, Origin Private File System, DevTools, File System, SQLite, Wasm, PWA, Stor
 
 ---
 
-## What's New (Version Notes for v0.0.5)
+## What's New (Version Notes for v0.1.0)
 
 ```
-v0.0.5 - Security & Architecture Update
+v0.1.0 - Multi-Selection, Keyboard Shortcuts & Accessibility
 
-SECURITY IMPROVEMENTS:
-• Removed content scripts entirely
-• No host permissions required (<all_urls> removed)
-• Uses DevTools native inspectedWindow.eval() API
-• Only permission: clipboardWrite for "Copy Path"
+MULTI-SELECTION:
+• Ctrl+Click to toggle individual items
+• Shift+Click for range selection
+• Ctrl+A to select all visible items
+• Bulk delete and download for multiple selections
+• Visual checkbox indicators in multi-select mode
 
-NEW FEATURES:
-• Verified CRX uploads support for Chrome Web Store
-• Manual release workflow for GitHub Actions
-• Automated asset generation scripts
-• Redesigned SVG logo
+KEYBOARD SHORTCUTS:
+• Ctrl+N / Cmd+N - New file
+• Ctrl+Shift+N / Cmd+Shift+N - New folder
+• F2 - Rename selected item
+• Delete / Backspace - Delete selected items
+• Arrow Up/Down - Navigate tree, Shift+Arrow to extend selection
+• Home/End - Jump to first/last tree item
+• Space - Toggle selection
+• Context menus show platform-aware shortcut hints
 
-This update significantly reduces the extension's permission footprint while maintaining full functionality. The extension no longer injects any code into web pages.
+ACCESSIBILITY (WCAG 2.1 AA):
+• ARIA tree pattern with roving tabindex navigation
+• Screen reader announcements via ARIA live regions
+• Focus trap in modal dialogs with return-focus-to-trigger
+• Skip navigation link for keyboard users
+• prefers-reduced-motion support (disables animations)
+• Windows High Contrast mode (forced-colors) support
+• focus-visible styling on all interactive elements
+• Descriptive aria-labels on all buttons and regions
+
+UI ENHANCEMENTS:
+• Context menus with icons, shortcut hints, and section separators
+• Type-ahead character search in context menus
+• Image preview keyboard shortcuts (+/- zoom, R rotate, 0 reset)
+• Keyboard-accessible resize handle (Shift+Arrow for larger steps)
+• Proper breadcrumb markup with aria-current
+• Storage bar with progressbar role and ARIA values
+
+This is a major UI/UX and accessibility update. The extension now meets WCAG 2.1 AA standards with comprehensive keyboard navigation and screen reader support.
 ```
 
 ---
@@ -127,7 +152,7 @@ This permission is used solely for the "Copy Path" feature in the context menu. 
 ### No Content Scripts
 
 **Note:**
-As of v0.0.5, this extension does NOT use content scripts. It uses `chrome.devtools.inspectedWindow.eval()` to execute OPFS operations in the context of the inspected page. This is a DevTools-native API that:
+As of v0.0.4, this extension does NOT use content scripts. It uses `chrome.devtools.inspectedWindow.eval()` to execute OPFS operations in the context of the inspected page. This is a DevTools-native API that:
 
 1. Only works when DevTools is open
 2. Does not require any host permissions
