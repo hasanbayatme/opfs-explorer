@@ -92,8 +92,12 @@ jobs:
 
             ## Installation
 
-            ### Chrome Web Store
-            *(Link pending publication)*
+            | Browser | Install Link |
+            |---------|--------------|
+            | **Chrome** | [Chrome Web Store](https://chromewebstore.google.com/detail/opfs-explorer/hhegfidnlemidclkkldeekjamkfcamic) |
+            | **Firefox** | [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/opfs-explorer/) |
+            | **Edge** | [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/odbpcdmkgeikdcmcdlfmdkbjiaeknnbd) |
+            | **Brave, Vivaldi, Arc** | Use the [Chrome Web Store](https://chromewebstore.google.com/detail/opfs-explorer/hhegfidnlemidclkkldeekjamkfcamic) link |
 
             ### Manual Installation
             1. Download `opfs-explorer-v${{ env.VERSION }}.zip`
