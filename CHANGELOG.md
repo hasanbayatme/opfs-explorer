@@ -5,6 +5,22 @@ All notable changes to OPFS Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-02-24
+
+### Fixed
+
+- **Binary file corruption on download**: `URL.revokeObjectURL()` was called synchronously immediately after `a.click()`, before the browser had a chance to read the object URL. Downloads of binary files (Arrow, SQLite, Parquet, WASM, etc.) would produce 0-byte or truncated files. Revocation is now deferred by 30 seconds.
+- **Binary write corruption for large files**: The entire base64 payload was inlined as a string literal inside the `inspectedWindow.eval()` call, which can silently fail or corrupt data beyond undocumented size limits. Binary uploads are now staged into the inspected page's `sessionStorage` in 64 KB chunks, then reassembled and decoded inside OPFS atomically.
+- **Binary files incorrectly classified as text**: OPFS does not preserve MIME types — every file stored in OPFS has `file.type === ""`. The previous `__opfs_isTextFile` check treated an empty type as text, causing binary files (Arrow, SQLite, WASM, Protobuf, `.bin`, etc.) to be read with `file.text()`, producing garbled UTF-8 in the editor. Classification now relies exclusively on file extension when the MIME type is absent.
+- **`btoa` / `Uint8Array.reduce` call-stack overflow**: Building the base64 binary string by reducing one character at a time over large `Uint8Array` buffers would exhaust the JavaScript call stack for images and binary previews beyond a few hundred KB. Replaced with an 8 KB chunked `String.fromCharCode.apply` loop.
+- **`escapeString` missing null bytes and Unicode line separators**: Null bytes (`\x00`) and Unicode line/paragraph separators (`\u2028`, `\u2029`) were not escaped, causing injected JavaScript to be syntactically invalid when file paths or text content contained these characters.
+- **`saveFile` could corrupt binary/image files**: The `Cmd/Ctrl+S` keyboard shortcut called `saveFile` even when viewing a binary file whose content was displayed as a `[BINARY]` or `data:…;base64,…` sentinel string. The sentinel text would be written back to OPFS, corrupting the file. A guard now blocks saves when the displayed content is a read-only sentinel.
+- **`stageBinaryData` sessionStorage leak on error**: If staging a chunk failed (e.g. sessionStorage quota exceeded), already-stored chunks were never removed, leaking `__opfs_bin_*` keys in the inspected page's sessionStorage indefinitely. Staged chunks are now cleaned up on any staging error.
+- **Undefined `base64` crashing upload**: `FileReader` produces a data URL; `content.split(',')[1]` returns `undefined` on a malformed result. This was passed into `stageBinaryData` which then crashed with a misleading error. An explicit guard now throws a descriptive error.
+- **Conflict resolution applied wrong target directory to pending uploads**: After resolving a file conflict, remaining queued uploads were all sent to the first file's target directory, ignoring each file's own intended path. Each pending upload is now dispatched with its own original `targetPath`.
+- **`[BINARY_OR_LARGE]` sentinel not recognised by read-only display**: The `isTooLarge` derived state was missing the `[BINARY_OR_LARGE]` prefix emitted by `api.read()`, so that sentinel could appear as editable text in CodeMirror instead of showing the download screen.
+- **Redundant `Array.from` copy in image base64 encoding**: `String.fromCharCode.apply(null, Array.from(bytes.subarray(...)))` created an unnecessary intermediate JS array. The `Uint8Array` subarray is array-like and can be passed directly to `apply`.
+
 ## [0.1.0] - 2026-02-11
 
 ### Added

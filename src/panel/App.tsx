@@ -358,6 +358,17 @@ function App() {
 
   const saveFile = useCallback(async () => {
     if (!primaryFile || primaryFile.kind !== 'file') return;
+    // Never write back sentinel strings or base64 data URLs — these represent
+    // binary/image/too-large files that are displayed read-only. Writing them
+    // back would corrupt the OPFS file with the display placeholder text.
+    if (
+      fileMeta?.isBase64 ||
+      fileContent.startsWith('[BINARY]') ||
+      fileContent.startsWith('[TOO_LARGE]') ||
+      fileContent.startsWith('[BINARY_OR_LARGE]')
+    ) {
+      return;
+    }
     try {
       await opfsApi.write(primaryFile.path, fileContent);
       setInitialContent(fileContent);
@@ -366,7 +377,7 @@ function App() {
     } catch (err) {
       addToast('error', `Failed to save: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [primaryFile, fileContent, addToast, announce]);
+  }, [primaryFile, fileContent, fileMeta, addToast, announce]);
 
   const handleDeleteSelected = useCallback(() => {
     if (selectedPaths.size === 0) return;
@@ -713,6 +724,9 @@ function App() {
             });
 
             const base64 = content.split(',')[1];
+            if (!base64) {
+              throw new Error(`Could not read file data for "${file.name}" — invalid data URL`);
+            }
             const filePath = targetPath ? `${targetPath}/${file.name}` : file.name;
 
             await opfsApi.write(filePath, base64, true);
@@ -750,7 +764,12 @@ function App() {
     if (pendingUploads.length > 0) {
       const remaining = [...pendingUploads];
       setPendingUploads([]);
-      await handleFileUpload(remaining.map(u => u.file), remaining[0]?.targetPath || '');
+      // Process each remaining upload with its own original targetPath, not
+      // just the first file's path (they may have been dropped onto different
+      // directories in a multi-target batch).
+      for (const pending of remaining) {
+        await handleFileUpload([pending.file], pending.targetPath);
+      }
     }
   };
 
@@ -915,7 +934,10 @@ function App() {
   const hasUnsavedChanges = fileContent !== initialContent && primaryFile?.kind === 'file';
   const isImage = primaryFile && isImageFile(primaryFile.name);
   const isMarkdown = primaryFile && isMarkdownFile(primaryFile.name);
-  const isTooLarge = fileContent.startsWith('[TOO_LARGE]') || fileContent.startsWith('[BINARY]');
+  const isTooLarge =
+    fileContent.startsWith('[TOO_LARGE]') ||
+    fileContent.startsWith('[BINARY]') ||
+    fileContent.startsWith('[BINARY_OR_LARGE]');
 
   // Keyboard shortcuts list
   const shortcuts = [
@@ -1478,7 +1500,7 @@ function App() {
               <Keyboard size={10} aria-hidden="true" />
               <span>Shortcuts</span>
             </button>
-            <span>OPFS Explorer v0.0.4</span>
+            <span>OPFS Explorer v0.1.1</span>
           </div>
         </footer>
 

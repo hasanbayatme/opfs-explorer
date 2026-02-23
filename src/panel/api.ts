@@ -308,7 +308,10 @@ function evalInPage<T>(code: string): Promise<T> {
 }
 
 /**
- * Escapes a string for safe inclusion in JavaScript code
+ * Escapes a string for safe inclusion in JavaScript code.
+ * Handles all characters that would break a JS string literal, including
+ * null bytes and Unicode line/paragraph separators (\u2028/\u2029) which
+ * are valid in JSON but illegal inside JS string literals.
  */
 function escapeString(str: string): string {
   return str
@@ -317,7 +320,10 @@ function escapeString(str: string): string {
     .replace(/"/g, '\\"')
     .replace(/\n/g, "\\n")
     .replace(/\r/g, "\\r")
-    .replace(/\t/g, "\\t");
+    .replace(/\t/g, "\\t")
+    .replace(/\0/g, "\\x00")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 }
 
 // Helper functions that will be injected into the page
@@ -344,14 +350,23 @@ function __opfs_isTextFile(file) {
     ".graphql", ".vue", ".svelte", ".astro"
   ];
   const name = file.name.toLowerCase();
-  return (
+  // Known text MIME types take precedence.
+  if (
     file.type.startsWith("text/") ||
-    file.type === "" ||
     file.type === "application/json" ||
     file.type === "application/javascript" ||
-    file.type === "application/xml" ||
-    textExtensions.some(ext => name.endsWith(ext))
-  );
+    file.type === "application/xml"
+  ) return true;
+  // If the file has a non-empty MIME type that is NOT a known text type,
+  // treat it as binary (e.g. application/octet-stream, application/wasm,
+  // application/vnd.apache.arrow.file, etc.).
+  // IMPORTANT: OPFS does not preserve MIME types — files uploaded as binary
+  // (arrow, sqlite, parquet, wasm, pb …) will have file.type === "".  We must
+  // NOT classify those as text just because the type is empty; instead we rely
+  // solely on the file extension to make that determination.
+  if (file.type !== "") return false;
+  // No MIME type at all — fall back to extension matching only.
+  return textExtensions.some(ext => name.endsWith(ext));
 }
 
 // Check if file is an image
@@ -392,6 +407,47 @@ async function __opfs_copyEntry(sourceHandle, destParentHandle, newName) {
   }
 }
 `;
+
+/**
+ * Stages base64-encoded binary data into the inspected page's sessionStorage
+ * using 64 KB chunks so that no single eval() call embeds an unbounded
+ * string literal. Returns the base key and the number of chunks stored.
+ *
+ * This avoids data corruption that can occur when very large base64 payloads
+ * are inlined directly into an eval'd code string.
+ */
+async function stageBinaryData(
+  base64: string
+): Promise<{ key: string; chunks: number }> {
+  const key =
+    "__opfs_bin_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+  const CHUNK = 65536; // 64 KB of base64 ≈ 48 KB binary
+  const totalChunks = Math.ceil(base64.length / CHUNK) || 1;
+  let staged = 0;
+
+  try {
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = base64.slice(i * CHUNK, (i + 1) * CHUNK);
+      const safeChunk = escapeString(chunk);
+      // Each individual eval only contains one ~64 KB chunk
+      await evalInPage<void>(
+        `sessionStorage.setItem('${key}_${i}', '${safeChunk}'); undefined`
+      );
+      staged++;
+    }
+  } catch (err) {
+    // Clean up any chunks that were already staged so we don't leave orphaned
+    // data in the inspected page's sessionStorage.
+    for (let i = 0; i < staged; i++) {
+      await evalInPage<void>(
+        `sessionStorage.removeItem('${key}_${i}'); undefined`
+      ).catch(() => {});
+    }
+    throw err;
+  }
+
+  return { key, chunks: totalChunks };
+}
 
 export const opfsApi = {
   /**
@@ -493,9 +549,17 @@ export const opfsApi = {
           };
         }
         const arrayBuffer = await file.arrayBuffer();
-        const base64 = btoa(
-          new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-        );
+        // Build the binary string in 8 KB chunks to avoid call-stack overflow
+        // that occurs when using Array.reduce + String.fromCharCode on large buffers.
+        // Pass the TypedArray subarray directly to apply() — it is array-like so
+        // no intermediate Array.from() copy is needed.
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        const CHUNK = 8192;
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+        }
+        const base64 = btoa(binary);
         return {
           content: "data:" + mimeType + ";base64," + base64,
           mimeType: mimeType,
@@ -542,40 +606,68 @@ export const opfsApi = {
     isBinary: boolean = false
   ): Promise<void> => {
     const safePath = escapeString(path);
-    const safeContent = escapeString(content);
-    const code = `
-      ${OPFS_HELPERS}
 
-      if (!isSecureContext) throw new Error("OPFS requires a Secure Context (HTTPS or localhost).");
-      if (!navigator.storage?.getDirectory) throw new Error("OPFS API not supported in this browser.");
+    if (isBinary) {
+      // Stage the base64 payload into the inspected page's sessionStorage in
+      // 64 KB chunks so that no single eval() call embeds an unbounded string
+      // literal — large inline base64 strings can corrupt or fail silently.
+      const { key, chunks } = await stageBinaryData(content);
 
-      const parts = "${safePath}".split("/");
-      const fileName = parts.pop();
-      const dirPath = parts.join("/");
+      const code = `
+        ${OPFS_HELPERS}
 
-      const dirHandle = await __opfs_resolvePath(dirPath);
-      const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-      const writable = await fileHandle.createWritable();
+        if (!isSecureContext) throw new Error("OPFS requires a Secure Context (HTTPS or localhost).");
+        if (!navigator.storage?.getDirectory) throw new Error("OPFS API not supported in this browser.");
 
-      ${
-        isBinary
-          ? `
-        const binaryString = atob("${safeContent}");
+        const parts = "${safePath}".split("/");
+        const fileName = parts.pop();
+        const dirPath = parts.join("/");
+
+        const dirHandle = await __opfs_resolvePath(dirPath);
+        const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+
+        // Reassemble chunks from sessionStorage
+        let base64 = '';
+        for (let i = 0; i < ${chunks}; i++) {
+          base64 += sessionStorage.getItem('${key}_' + i) || '';
+        }
+        // Clean up staged chunks
+        for (let i = 0; i < ${chunks}; i++) {
+          sessionStorage.removeItem('${key}_' + i);
+        }
+
+        const binaryString = atob(base64);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
         await writable.write(bytes);
-      `
-          : `
-        await writable.write("${safeContent}");
-      `
-      }
+        await writable.close();
+        return true;
+      `;
+      await evalInPage<boolean>(code);
+    } else {
+      const safeContent = escapeString(content);
+      const code = `
+        ${OPFS_HELPERS}
 
-      await writable.close();
-      return true;
-    `;
-    await evalInPage<boolean>(code);
+        if (!isSecureContext) throw new Error("OPFS requires a Secure Context (HTTPS or localhost).");
+        if (!navigator.storage?.getDirectory) throw new Error("OPFS API not supported in this browser.");
+
+        const parts = "${safePath}".split("/");
+        const fileName = parts.pop();
+        const dirPath = parts.join("/");
+
+        const dirHandle = await __opfs_resolvePath(dirPath);
+        const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write("${safeContent}");
+        await writable.close();
+        return true;
+      `;
+      await evalInPage<boolean>(code);
+    }
   },
 
   /**
@@ -738,7 +830,11 @@ export const opfsApi = {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Delay revocation so the browser has time to read the object URL and
+      // initiate the download. Revoking synchronously after click() causes the
+      // browser to see a revoked (empty) URL, resulting in a 0-byte or
+      // corrupted file — especially noticeable with binary files like Arrow.
+      setTimeout(function() { URL.revokeObjectURL(url); }, 30000);
       return true;
     `;
     await evalInPage<boolean>(code);

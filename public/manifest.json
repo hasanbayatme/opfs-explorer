@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "OPFS Explorer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A powerful DevTools extension to inspect, manage, and edit files in the Origin Private File System (OPFS)",
   "devtools_page": "devtools.html",
   "permissions": [
@@ -18,7 +18,9 @@
       "id": "opfs-explorer@hasan.bayat.io",
       "strict_min_version": "109.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": [
+          "none"
+        ]
       }
     }
   }

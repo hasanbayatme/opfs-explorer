@@ -19,7 +19,7 @@ We have an interactive script that handles the entire process for you:
 6.  Pushes the code and tags to GitHub.
 
 **After the script finishes:**
-1.  Go to the [GitHub Actions](https://github.com/YOUR_USERNAME/opfs-explorer/actions) tab.
+1.  Go to the [GitHub Actions](https://github.com/hasanbayatme/opfs-explorer/actions) tab.
 2.  Watch the **Release** workflow run.
 3.  Once finished, go to the **Releases** page on GitHub.
 4.  Download the `opfs-explorer-vX.X.X.zip` asset.
