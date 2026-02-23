@@ -19,7 +19,7 @@ fi
 # 2. Ask for version bump type
 echo -e "Select release type:"
 PS3="Select number: "
-options=("Patch (0.0.X - Bug fixes)" "Minor (0.X.0 - Features)" "Major (X.0.0 - Breaking)" "Quit")
+options=("Patch (0.0.X - Bug fixes)" "Minor (0.X.0 - Features)" "Major (X.0.0 - Breaking)" "Skip (version already bumped)" "Quit")
 select opt in "${options[@]}"
 do
     case $opt in
@@ -33,6 +33,10 @@ do
             ;;
         "Major (X.0.0 - Breaking)")
             BUMP="major"
+            break
+            ;;
+        "Skip (version already bumped)")
+            BUMP="skip"
             break
             ;;
         "Quit")
@@ -50,13 +54,15 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 4. Perform Version Bump
-echo -e "\n${BLUE}📦 Bumping version ($BUMP)...${NC}"
-npm version $BUMP -m "chore(release): %s"
+# 4. Perform Version Bump (skip if already bumped manually)
+if [[ "$BUMP" != "skip" ]]; then
+  echo -e "\n${BLUE}📦 Bumping version ($BUMP)...${NC}"
+  npm version $BUMP -m "chore(release): %s"
+fi
 
-# Get the new version number
+# Get the current version number (either freshly bumped or pre-existing)
 VERSION=$(node -p "require('./package.json').version")
-echo -e "${GREEN}✅ Version bumped to v$VERSION${NC}"
+echo -e "${GREEN}✅ Version: v$VERSION${NC}"
 
 # 5. Update manifest.json version to match package.json
 # (Simple sed replacement, assuming standard formatting)
@@ -65,14 +71,26 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 else
   sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" public/manifest.json
 fi
+
+# Stage manifest.json. App.tsx no longer needs updating here — the version
+# string is injected at build time from package.json via Vite's `define`.
 git add public/manifest.json
-git commit --amend --no-edit
-# Move tag to point to amended commit
-git tag -f "v$VERSION"
+if [[ "$BUMP" != "skip" ]]; then
+  git commit --amend --no-edit
+  # Move tag to point to amended commit
+  git tag -f "v$VERSION"
+else
+  # When skipping the bump, create a fresh commit for the manifest update
+  # (only if there's actually a change to commit).
+  if ! git diff --cached --quiet; then
+    git commit -m "chore(release): sync manifest.json to v$VERSION"
+  fi
+  git tag -f "v$VERSION"
+fi
 
 echo -e "${GREEN}✅ manifest.json updated${NC}"
 
-# 6. Push to GitHub
+# 7. Push to GitHub
 echo -e "\n${BLUE}🚀 Pushing to GitHub...${NC}"
 read -p "Are you sure you want to push v$VERSION to origin? (y/n) " -n 1 -r
 echo

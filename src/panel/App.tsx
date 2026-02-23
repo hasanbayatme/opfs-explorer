@@ -1500,7 +1500,7 @@ function App() {
               <Keyboard size={10} aria-hidden="true" />
               <span>Shortcuts</span>
             </button>
-            <span>OPFS Explorer v0.1.1</span>
+            <span>OPFS Explorer v{__APP_VERSION__}</span>
           </div>
         </footer>
 
