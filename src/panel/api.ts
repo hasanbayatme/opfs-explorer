@@ -340,33 +340,49 @@ async function __opfs_resolvePath(path) {
   return current;
 }
 
-// Check if file is text-based
+// Known text file extensions — extensionless / custom-ext files fall through to content sniffing
+const __opfs_textExtensions = [
+  ".txt", ".json", ".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".sass",
+  ".html", ".htm", ".md", ".markdown", ".xml", ".yaml", ".yml", ".toml",
+  ".ini", ".cfg", ".env", ".gitignore", ".sh", ".bash", ".zsh", ".fish",
+  ".py", ".rb", ".php", ".java", ".c", ".cpp", ".h", ".hpp", ".rs", ".go",
+  ".swift", ".kt", ".sql", ".graphql", ".vue", ".svelte", ".astro",
+  // Game / 3D engine assets
+  ".scene", ".prefab", ".asset", ".meta", ".shader", ".glsl", ".wgsl",
+  ".hlsl", ".material", ".anim", ".controller", ".tscn", ".gd", ".tres",
+  ".godot", ".unity",
+  // Config & data formats
+  ".conf", ".config", ".lock", ".map", ".csv", ".tsv", ".log",
+  ".properties", ".plist", ".strings", ".tf", ".hcl", ".proto",
+  // Additional languages
+  ".lua", ".r", ".dart", ".ex", ".exs", ".erl", ".hs", ".elm",
+  ".clj", ".cljs", ".coffee", ".asm", ".s"
+];
+
+// Known binary file extensions — skip content sniffing for these
+const __opfs_binaryExtensions = [
+  ".wasm", ".db", ".sqlite", ".sqlite3", ".bin", ".dat", ".exe", ".dll",
+  ".so", ".dylib", ".o", ".obj", ".lib", ".a", ".class", ".pyc", ".pyo",
+  ".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar",
+  ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+  ".mp3", ".mp4", ".avi", ".mov", ".mkv", ".wav", ".flac", ".ogg", ".aac",
+  ".pb", ".onnx", ".parquet", ".arrow", ".npy", ".npz",
+  ".ttf", ".otf", ".woff", ".woff2"
+];
+
+// Check if file is text-based (quick check, no content sniffing)
 function __opfs_isTextFile(file) {
-  const textExtensions = [
-    ".txt", ".json", ".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".sass",
-    ".html", ".htm", ".md", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg",
-    ".env", ".gitignore", ".sh", ".bash", ".zsh", ".fish", ".py", ".rb", ".php",
-    ".java", ".c", ".cpp", ".h", ".hpp", ".rs", ".go", ".swift", ".kt", ".sql",
-    ".graphql", ".vue", ".svelte", ".astro"
-  ];
   const name = file.name.toLowerCase();
-  // Known text MIME types take precedence.
   if (
     file.type.startsWith("text/") ||
     file.type === "application/json" ||
     file.type === "application/javascript" ||
     file.type === "application/xml"
   ) return true;
-  // If the file has a non-empty MIME type that is NOT a known text type,
-  // treat it as binary (e.g. application/octet-stream, application/wasm,
-  // application/vnd.apache.arrow.file, etc.).
-  // IMPORTANT: OPFS does not preserve MIME types — files uploaded as binary
-  // (arrow, sqlite, parquet, wasm, pb …) will have file.type === "".  We must
-  // NOT classify those as text just because the type is empty; instead we rely
-  // solely on the file extension to make that determination.
+  // Non-empty non-text MIME type => treat as binary
   if (file.type !== "") return false;
-  // No MIME type at all — fall back to extension matching only.
-  return textExtensions.some(ext => name.endsWith(ext));
+  // No MIME type — fall back to extension matching only.
+  return __opfs_textExtensions.some(ext => name.endsWith(ext));
 }
 
 // Check if file is an image
@@ -374,6 +390,102 @@ function __opfs_isImageFile(file) {
   const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".ico", ".bmp", ".avif"];
   const name = file.name.toLowerCase();
   return file.type.startsWith("image/") || imageExtensions.some(ext => name.endsWith(ext));
+}
+
+// Multi-strategy file type detection: MIME type → extension → content sniffing
+// Returns 'text' | 'binary' | 'image' | 'unknown'
+async function __opfs_detectFileType(file) {
+  // Strategy 1: Image
+  if (__opfs_isImageFile(file)) return 'image';
+
+  // Strategy 2: MIME type clues
+  if (
+    file.type.startsWith('text/') ||
+    file.type === 'application/json' ||
+    file.type === 'application/javascript' ||
+    file.type === 'application/xml'
+  ) return 'text';
+  if (
+    file.type === 'application/octet-stream' ||
+    file.type === 'application/wasm' ||
+    file.type.startsWith('audio/') ||
+    file.type.startsWith('video/') ||
+    file.type === 'application/pdf' ||
+    file.type === 'application/zip' ||
+    (file.type.startsWith('application/vnd.') && file.type !== 'application/vnd.apple.mpegurl')
+  ) return 'binary';
+
+  // Strategy 3: Extension matching
+  const name = file.name.toLowerCase();
+  if (__opfs_textExtensions.some(ext => name.endsWith(ext))) return 'text';
+  if (__opfs_binaryExtensions.some(ext => name.endsWith(ext))) return 'binary';
+
+  // Strategy 4: Content sniffing on first 4096 bytes
+  if (file.size === 0) return 'text';
+  try {
+    const sampleSize = Math.min(4096, file.size);
+    const buffer = await file.slice(0, sampleSize).arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    if (bytes.length >= 2) {
+      const b0 = bytes[0], b1 = bytes[1];
+      const b2 = bytes.length > 2 ? bytes[2] : 0;
+      const b3 = bytes.length > 3 ? bytes[3] : 0;
+      // Magic byte signatures for well-known binary formats
+      if (b0 === 0x89 && b1 === 0x50 && b2 === 0x4E && b3 === 0x47) return 'binary'; // PNG
+      if (b0 === 0xFF && b1 === 0xD8) return 'binary'; // JPEG
+      if (b0 === 0x47 && b1 === 0x49 && b2 === 0x46) return 'binary'; // GIF
+      if (b0 === 0x25 && b1 === 0x50 && b2 === 0x44 && b3 === 0x46) return 'binary'; // PDF %PDF
+      if (b0 === 0x50 && b1 === 0x4B) return 'binary'; // ZIP/DOCX/etc PK header
+      if (b0 === 0x7F && b1 === 0x45 && b2 === 0x4C && b3 === 0x46) return 'binary'; // ELF
+      if (b0 === 0x00 && b1 === 0x61 && b2 === 0x73 && b3 === 0x6D) return 'binary'; // WASM \0asm
+      if (b0 === 0x53 && b1 === 0x51 && b2 === 0x4C && b3 === 0x69) return 'binary'; // SQLite
+      if (b0 === 0x1F && b1 === 0x8B) return 'binary'; // GZip
+      if (b0 === 0x42 && b1 === 0x5A && b2 === 0x68) return 'binary'; // BZip2
+      if (b0 === 0xFD && b1 === 0x37 && b2 === 0x7A) return 'binary'; // XZ
+      if (b0 === 0x52 && b1 === 0x49 && b2 === 0x46 && b3 === 0x46) return 'binary'; // RIFF (WAV/AVI/WebP)
+      if (b0 === 0x4F && b1 === 0x67 && b2 === 0x67 && b3 === 0x53) return 'binary'; // OGG
+      if (b0 === 0xCA && b1 === 0xFE && b2 === 0xBA && b3 === 0xBE) return 'binary'; // Java class
+      if (b0 === 0x4D && b1 === 0x5A) return 'binary'; // PE/EXE MZ
+      if (b0 === 0x37 && b1 === 0x7A && b2 === 0xBC && b3 === 0xAF) return 'binary'; // 7-zip
+    }
+
+    // Byte statistics
+    let nullCount = 0;
+    let highCount = 0;
+    let controlCount = 0; // non-printable control chars (< 0x20, excluding tab/LF/CR)
+    for (let i = 0; i < bytes.length; i++) {
+      const b = bytes[i];
+      if (b === 0x00) nullCount++;
+      else if (b > 0x7E) highCount++;
+      else if (b < 0x20 && b !== 0x09 && b !== 0x0A && b !== 0x0D) controlCount++;
+    }
+
+    // Null bytes are a strong binary indicator
+    if (nullCount > 0) return 'binary';
+    // High ratio of non-ASCII bytes → likely binary
+    if (highCount / bytes.length > 0.30) return 'binary';
+    // High ratio of control characters → likely binary
+    if (controlCount / bytes.length > 0.10) return 'binary';
+
+    // Content probe: look for common text patterns at the start
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    const text = decoder.decode(bytes).trimStart();
+    if (
+      text.startsWith('{') || text.startsWith('[') || // JSON
+      text.startsWith('<') || // XML/HTML
+      text.startsWith('#') || text.startsWith('//') || text.startsWith('/*') || // Code comments
+      text.startsWith('--') || text.startsWith(';') || // SQL / INI
+      text.startsWith('---') // YAML front-matter
+    ) return 'text';
+
+    // Entirely printable ASCII with no suspicious bytes
+    if (nullCount === 0 && highCount === 0 && controlCount === 0) return 'text';
+
+    return 'unknown';
+  } catch (e) {
+    return 'unknown';
+  }
 }
 
 // Get MIME type
@@ -474,6 +586,7 @@ export const opfsApi = {
             const file = await handle.getFile();
             entry.size = file.size;
             entry.lastModified = file.lastModified;
+            if (file.type) entry.mimeType = file.type;
           } catch (e) {}
         }
         files.push(entry);
@@ -519,10 +632,12 @@ export const opfsApi = {
   },
 
   /**
-   * Read file with metadata (supports images as base64)
+   * Read file with metadata (supports images as base64, text up to 10 MB,
+   * content-sniffing for unknown extensions, and forceText override).
    */
-  readWithMeta: async (path: string): Promise<FileReadResult> => {
+  readWithMeta: async (path: string, options?: { forceText?: boolean }): Promise<FileReadResult> => {
     const safePath = escapeString(path);
+    const forceTextLiteral = options?.forceText ? 'true' : 'false';
     const code = `
       ${OPFS_HELPERS}
 
@@ -538,21 +653,25 @@ export const opfsApi = {
       const file = await fileHandle.getFile();
       const mimeType = __opfs_getMimeType(file);
 
-      // For images, return as base64 (up to 5MB)
-      if (__opfs_isImageFile(file)) {
+      // When forceText is true (user clicked "Open as Text"), skip detection
+      const forceText = ${forceTextLiteral};
+      const detectedType = forceText ? 'text' : await __opfs_detectFileType(file);
+
+      // Images — return as base64 data URL (up to 5 MB)
+      if (detectedType === 'image') {
         if (file.size > 5 * 1024 * 1024) {
           return {
             content: "[TOO_LARGE] Image is too large to preview (" + (file.size / 1024 / 1024).toFixed(2) + " MB)",
             mimeType: mimeType,
             size: file.size,
-            isBase64: false
+            isBase64: false,
+            detectedType: 'image',
+            isLargeText: false
           };
         }
         const arrayBuffer = await file.arrayBuffer();
         // Build the binary string in 8 KB chunks to avoid call-stack overflow
         // that occurs when using Array.reduce + String.fromCharCode on large buffers.
-        // Pass the TypedArray subarray directly to apply() — it is array-like so
-        // no intermediate Array.from() copy is needed.
         const bytes = new Uint8Array(arrayBuffer);
         let binary = '';
         const CHUNK = 8192;
@@ -564,25 +683,46 @@ export const opfsApi = {
           content: "data:" + mimeType + ";base64," + base64,
           mimeType: mimeType,
           size: file.size,
-          isBase64: true
+          isBase64: true,
+          detectedType: 'image',
+          isLargeText: false
         };
       }
 
-      // For text files (up to 1MB)
-      if (__opfs_isTextFile(file)) {
-        if (file.size > 1024 * 1024) {
+      // Text files — allow up to 10 MB; files between 1–10 MB are flagged as large
+      if (detectedType === 'text') {
+        const TEXT_MAX = 10 * 1024 * 1024; // 10 MB hard cap
+        const LARGE_THRESHOLD = 1024 * 1024; // 1 MB
+        if (file.size > TEXT_MAX) {
           return {
-            content: "[TOO_LARGE] File is too large to preview (" + (file.size / 1024 / 1024).toFixed(2) + " MB)",
+            content: "[TOO_LARGE] File is too large to preview (" + (file.size / 1024 / 1024).toFixed(2) + " MB). Download to view.",
             mimeType: mimeType,
             size: file.size,
-            isBase64: false
+            isBase64: false,
+            detectedType: 'text',
+            isLargeText: false
           };
         }
+        const isLargeText = file.size > LARGE_THRESHOLD;
         return {
           content: await file.text(),
           mimeType: mimeType,
           size: file.size,
-          isBase64: false
+          isBase64: false,
+          detectedType: 'text',
+          isLargeText: isLargeText
+        };
+      }
+
+      // Unknown type — content sniffing was inconclusive; let the user decide
+      if (detectedType === 'unknown') {
+        return {
+          content: "[UNKNOWN_TYPE] Cannot determine whether this file is text or binary. Use \\"Open as Text\\" to force text editing, or download to inspect.",
+          mimeType: mimeType,
+          size: file.size,
+          isBase64: false,
+          detectedType: 'unknown',
+          isLargeText: false
         };
       }
 
@@ -591,7 +731,9 @@ export const opfsApi = {
         content: "[BINARY] Type: " + mimeType + ", Size: " + file.size + " bytes",
         mimeType: mimeType,
         size: file.size,
-        isBase64: false
+        isBase64: false,
+        detectedType: 'binary',
+        isLargeText: false
       };
     `;
     return evalInPage<FileReadResult>(code);

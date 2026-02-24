@@ -5,6 +5,24 @@ All notable changes to OPFS Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-02-24
+
+### Added
+
+- **Multi-strategy file type detection**: Files are now classified through a four-layer pipeline — MIME type -> file extension -> magic bytes -> byte statistics/content probe — eliminating false binary classifications for files with unknown or custom extensions.
+- **Content sniffing**: When extension and MIME type are inconclusive, the first 4 096 bytes are inspected. Magic-byte signatures cover PNG, JPEG, GIF, PDF, ZIP, ELF, WASM, SQLite, GZip, BZip2, XZ, RIFF, OGG, Java `.class`, PE/EXE, and 7-zip. Byte-ratio checks (null bytes, high-byte ratio, control-character ratio) catch remaining binary formats.
+- **Custom/game-engine file formats open as text**: Files like `my-game.scene`, `.prefab`, `.asset`, `.tscn`, `.gd`, `.shader`, `.glsl`, `.wgsl`, `.hlsl`, and many more are now recognised as text and open directly in the editor with the appropriate syntax highlighter.
+- **"Open as Text" disambiguation screen**: When file type is genuinely ambiguous after all detection strategies, a disambiguation screen is shown with "Open as Text" (force-opens in the editor) and "Download" options instead of silently showing a download-only screen.
+- **Large text file support**: Text files up to 10 MB (raised from 1 MB) are now viewable and editable. Files between 1–10 MB show a dismissible warning banner; files above 10 MB show the download screen.
+- **Expanded syntax highlighting**: The editor now selects the correct language mode for Markdown, XML/SVG, Python, SQL, Rust, C/C++, Java, YAML, and Shell scripts. Game-engine asset files (`.scene`, `.prefab`, `.tscn`, etc.) automatically use JSON or XML mode based on their content.
+- **Expanded file-tree icons**: Dozens of new icon mappings for game assets, config files (`.yaml`, `.toml`, `.lock`, `.conf`), scripting languages, C/C++/Java sources, XML-family files, SQL files, archives, and more.
+- **`mimeType` populated on file listing**: `FileEntry.mimeType` is now set from `file.type` during directory enumeration when the browser provides it.
+
+### Fixed
+
+- **Custom-extension JSON files shown as Binary**: Files storing JSON under non-standard extensions (e.g. `.scene`, `.prefab`, `.tres`, `.material`) were previously classified as binary because the MIME type is empty in OPFS and the extension was not in the recognised list. They now open in the editor with JSON syntax highlighting.
+- **`.markdown` extension missing from Markdown icon**: TreeItem only matched `.md`; `.markdown` files now also receive the document icon.
+
 ## [0.1.1] - 2026-02-24
 
 ### Fixed

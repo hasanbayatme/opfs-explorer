@@ -181,10 +181,17 @@ export function TreeItem({
     if (name.endsWith('.ts') || name.endsWith('.tsx')) return <FileCode size={14} className="text-blue-400" aria-hidden="true" />;
     if (name.endsWith('.css') || name.endsWith('.scss') || name.endsWith('.sass')) return <FileType size={14} className="text-pink-400" aria-hidden="true" />;
     if (name.endsWith('.html') || name.endsWith('.htm')) return <FileCode size={14} className="text-orange-400" aria-hidden="true" />;
-    if (name.match(/\.(jpg|jpeg|png|gif|svg|webp|ico|bmp)$/)) return <Image size={14} className="text-purple-400" aria-hidden="true" />;
-    if (name.match(/\.(md|markdown|txt|log)$/)) return <FileText size={14} className="text-gray-400" aria-hidden="true" />;
+    if (name.match(/\.(jpg|jpeg|png|gif|svg|webp|ico|bmp|avif)$/)) return <Image size={14} className="text-purple-400" aria-hidden="true" />;
+    if (name.match(/\.(md|markdown|txt|log|csv|tsv)$/)) return <FileText size={14} className="text-gray-400" aria-hidden="true" />;
+    if (name.match(/\.(scene|prefab|asset|meta|tscn|tres|gd|unity|godot|material|shader|glsl|wgsl|hlsl)$/)) return <FileCode size={14} className="text-green-300" aria-hidden="true" />;
+    if (name.match(/\.(yaml|yml|toml|ini|cfg|conf|config|env|properties|lock)$/)) return <FileCode size={14} className="text-teal-400" aria-hidden="true" />;
+    if (name.match(/\.(py|rb|php|go|rs|swift|kt|dart|lua|r|ex|exs|erl|hs|elm|clj)$/)) return <FileCode size={14} className="text-amber-400" aria-hidden="true" />;
+    if (name.match(/\.(c|cpp|h|hpp|cc|java)$/)) return <FileCode size={14} className="text-blue-300" aria-hidden="true" />;
+    if (name.match(/\.(xml|svg|plist|proto|graphql)$/)) return <FileCode size={14} className="text-orange-300" aria-hidden="true" />;
+    if (name.match(/\.(sql)$/)) return <Database size={14} className="text-blue-400" aria-hidden="true" />;
     if (name.match(/\.(db|sqlite|sqlite3)$/)) return <Database size={14} className="text-green-400" aria-hidden="true" />;
     if (name.match(/\.(wasm)$/)) return <File size={14} className="text-purple-500" aria-hidden="true" />;
+    if (name.match(/\.(zip|tar|gz|tgz|bz2|xz|7z|rar)$/)) return <File size={14} className="text-yellow-600" aria-hidden="true" />;
     return <File size={14} className="text-gray-400" aria-hidden="true" />;
   };
 

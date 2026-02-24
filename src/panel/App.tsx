@@ -249,7 +249,7 @@ function App() {
   // Selection handling
   // ============================================================
 
-  const loadFileContent = useCallback(async (entry: FileEntry) => {
+  const loadFileContent = useCallback(async (entry: FileEntry, options?: { forceText?: boolean }) => {
     if (entry.kind !== 'file') {
       setFileContent('');
       setFileMeta(null);
@@ -259,7 +259,7 @@ function App() {
     setContentLoading(true);
     setMarkdownViewMode('preview');
     try {
-      const result = await opfsApi.readWithMeta(entry.path);
+      const result = await opfsApi.readWithMeta(entry.path, options);
       setFileMeta(result);
       setFileContent(result.content);
       setInitialContent(result.content);
@@ -365,7 +365,8 @@ function App() {
       fileMeta?.isBase64 ||
       fileContent.startsWith('[BINARY]') ||
       fileContent.startsWith('[TOO_LARGE]') ||
-      fileContent.startsWith('[BINARY_OR_LARGE]')
+      fileContent.startsWith('[BINARY_OR_LARGE]') ||
+      fileContent.startsWith('[UNKNOWN_TYPE]')
     ) {
       return;
     }
@@ -934,10 +935,12 @@ function App() {
   const hasUnsavedChanges = fileContent !== initialContent && primaryFile?.kind === 'file';
   const isImage = primaryFile && isImageFile(primaryFile.name);
   const isMarkdown = primaryFile && isMarkdownFile(primaryFile.name);
+  // [UNKNOWN_TYPE] is handled separately (disambiguation screen) — not treated as too-large
   const isTooLarge =
     fileContent.startsWith('[TOO_LARGE]') ||
     fileContent.startsWith('[BINARY]') ||
     fileContent.startsWith('[BINARY_OR_LARGE]');
+  const isUnknownType = fileContent.startsWith('[UNKNOWN_TYPE]');
 
   // Keyboard shortcuts list
   const shortcuts = [
@@ -1429,14 +1432,53 @@ function App() {
                   Download File
                 </button>
               </div>
+            ) : isUnknownType ? (
+              <div className="flex flex-col items-center justify-center h-full text-dt-text-secondary space-y-4 p-8 text-center">
+                <FileText size={48} className="opacity-40" aria-hidden="true" />
+                <div className="max-w-sm space-y-2">
+                  <p className="text-sm font-medium text-dt-text">Unknown file type</p>
+                  <p className="text-xs opacity-70">
+                    The file type could not be determined from its extension, MIME type, or content.
+                    It may be a custom text format, a renamed file, or a binary file.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => loadFileContent(primaryFile, { forceText: true })}
+                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors text-xs"
+                  >
+                    <Edit3 size={14} className="mr-2" aria-hidden="true" />
+                    Open as Text
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(primaryFile.path)}
+                    className="flex items-center px-4 py-2 bg-dt-surface border border-dt-border rounded hover:bg-dt-hover transition-colors text-xs"
+                  >
+                    <Download size={14} className="mr-2" aria-hidden="true" />
+                    Download
+                  </button>
+                </div>
+              </div>
             ) : isMarkdown && markdownViewMode === 'preview' ? (
               <MarkdownPreview content={fileContent} />
             ) : (
-              <FileEditor
-                content={fileContent}
-                fileName={primaryFile.name}
-                onChange={setFileContent}
-              />
+              <div className="flex flex-col h-full">
+                {fileMeta?.isLargeText && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-500 text-xs shrink-0">
+                    <AlertCircle size={12} aria-hidden="true" />
+                    <span>Large file ({fileMeta.size ? formatFileSize(fileMeta.size) : 'unknown size'}) — editing may be slow</span>
+                  </div>
+                )}
+                <div className="flex-1 overflow-hidden">
+                  <FileEditor
+                    content={fileContent}
+                    fileName={primaryFile.name}
+                    onChange={setFileContent}
+                  />
+                </div>
+              </div>
             )
           ) : primaryFile?.kind === 'directory' ? (
             <div className="flex flex-col items-center justify-center h-full text-dt-text-secondary opacity-50">
