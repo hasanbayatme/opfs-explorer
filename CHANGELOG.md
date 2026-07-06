@@ -5,7 +5,17 @@ All notable changes to OPFS Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.2] - 2026-02-24
+## [0.1.3] - 2026-07-06
+
+### Fixed
+
+- **Stuck "ghost" files/folders that can't be deleted, renamed, or opened**: OPFS can occasionally leave behind a corrupted directory entry — one that still shows up when listing a folder's contents, but throws `NotFoundError` ("A requested file or directory could not be found") when the extension tries to resolve it directly. This could happen after an operation was interrupted (e.g. the inspected page was paused at a debugger breakpoint mid-write) or due to underlying browser storage corruption, and previously left the entry permanently stuck — deleting it failed, renaming it failed, and expanding it in the tree failed, with no way to recover short of wiping all site data. **Delete now self-heals these entries**: when `removeEntry()` reports the entry as missing, the extension recreates it (repairing the directory's internal index) and immediately retries the removal, so the stuck entry can finally be deleted. `rename()`/`move()` benefit from the same repair path, and if an entry truly can't be resolved as either a file or a directory, a clear "this item appears corrupted" message is shown instead of a raw browser error.
+- **Duplicate directory entries could break the file tree UI**: If OPFS ever reports two entries with the same name in one folder (a symptom of the corruption above), the tree previously used the entry's path as the sole React key, causing duplicate keys and broken/duplicated rendering. Tree items are now keyed uniquely so duplicate-named entries render correctly side by side instead of corrupting the view.
+- **Rapid double-submission of Create/Rename/Delete dialogs could race and corrupt OPFS**: The confirmation/prompt dialog didn't disable itself while an action was in flight, so pressing Enter (or clicking Confirm) more than once — for example while the inspected page was busy or paused at a breakpoint and slow to respond — could fire two concurrent OPFS operations for the same entry. This is a likely root cause of the corrupted-entry issue above. The dialog now disables its input/buttons and ignores repeat submissions until the in-flight operation completes.
+- **Overly short eval timeout on Chrome/Edge**: The polling helper used to communicate with the inspected page timed out after only ~3 seconds on Chromium-based browsers (vs. 30 seconds on Safari), which was easy to hit when the page was slow or paused in the debugger. The extension would report a false "Operation timed out" error while the underlying OPFS operation kept running in the page, encouraging users to retry and potentially double up on the same operation. The timeout is now a consistent 30 seconds across all browsers.
+- **Corrupted folders showed a raw, confusing error when expanded**: Expanding a folder that can't be resolved now shows a clear "This folder appears to be corrupted… You can still delete it" message instead of a raw `NotFoundError`.
+
+
 
 ### Added
 

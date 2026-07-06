@@ -1222,9 +1222,9 @@ function App() {
                     <p className="text-[10px] opacity-60">Drop files here or create new ones</p>
                 </div>
             ) : (
-                filteredFiles.map(file => (
+                filteredFiles.map((file, idx) => (
                     <TreeItem
-                        key={file.path}
+                        key={`${file.path}#${idx}`}
                         entry={file}
                         onSelect={handleSelect}
                         selectedPaths={selectedPaths}

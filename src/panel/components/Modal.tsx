@@ -8,7 +8,7 @@ interface ModalProps {
   inputValue?: string;
   placeholder?: string;
   type: 'alert' | 'confirm' | 'prompt';
-  onConfirm: (value?: string) => void;
+  onConfirm: (value?: string) => void | Promise<void>;
   onCancel: () => void;
   /** Whether the confirm action is destructive (shows red button) */
   danger?: boolean;
@@ -16,6 +16,7 @@ interface ModalProps {
 
 export function Modal({ isOpen, title, message, inputValue = '', placeholder, type, onConfirm, onCancel, danger }: ModalProps) {
   const [value, setValue] = useState(inputValue);
+  const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
@@ -29,10 +30,31 @@ export function Modal({ isOpen, title, message, inputValue = '', placeholder, ty
     }
   }, [isOpen]);
 
+  // Reset the submission guard whenever the modal is (re)opened, since the
+  // caller may reuse the same Modal instance for a subsequent action.
+  useEffect(() => {
+    if (isOpen) setSubmitting(false);
+  }, [isOpen]);
+
   // Sync input value when inputValue prop changes
   useEffect(() => {
     setValue(inputValue);
   }, [inputValue]);
+
+  // Guards against duplicate confirmations: if the page is slow to respond
+  // (e.g. paused at a debugger breakpoint) a user may press Enter or click
+  // "Confirm" repeatedly. Without this guard, each press fires a separate
+  // concurrent create/rename/delete call against the same OPFS entry, which
+  // can race and leave corrupted/duplicate "ghost" directory entries behind.
+  const submit = useCallback(async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await onConfirm(value);
+    } finally {
+      setSubmitting(false);
+    }
+  }, [submitting, onConfirm, value]);
 
   // Focus management: focus input or first button on open
   useEffect(() => {
@@ -63,12 +85,12 @@ export function Modal({ isOpen, title, message, inputValue = '', placeholder, ty
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      onConfirm(value);
+      submit();
       return;
     }
     if (e.key === 'Escape') {
       e.preventDefault();
-      onCancel();
+      if (!submitting) onCancel();
       return;
     }
     if (e.key === 'Tab' && dialogRef.current) {
@@ -92,7 +114,7 @@ export function Modal({ isOpen, title, message, inputValue = '', placeholder, ty
         }
       }
     }
-  }, [value, onConfirm, onCancel]);
+  }, [submit, submitting, onCancel]);
 
   if (!isOpen) return null;
 
@@ -101,7 +123,7 @@ export function Modal({ isOpen, title, message, inputValue = '', placeholder, ty
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-[1px] modal-backdrop-enter"
       role="presentation"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
+        if (e.target === e.currentTarget && !submitting) onCancel();
       }}
     >
       <div
@@ -118,7 +140,8 @@ export function Modal({ isOpen, title, message, inputValue = '', placeholder, ty
           <h3 id="modal-title" className="font-semibold text-dt-text text-sm">{title}</h3>
           <button
             onClick={onCancel}
-            className="p-0.5 rounded text-dt-text-secondary hover:text-dt-text hover:bg-dt-hover transition-colors"
+            disabled={submitting}
+            className="p-0.5 rounded text-dt-text-secondary hover:text-dt-text hover:bg-dt-hover transition-colors disabled:opacity-40 disabled:pointer-events-none"
             aria-label="Close dialog"
           >
             <X size={14} />
@@ -133,13 +156,14 @@ export function Modal({ isOpen, title, message, inputValue = '', placeholder, ty
             <input
               ref={inputRef}
               type="text"
-              className="w-full bg-dt-bg border border-dt-border rounded px-2 py-1.5 text-xs text-dt-text focus:border-[var(--dt-focus)] focus:outline-none transition-colors"
+              className="w-full bg-dt-bg border border-dt-border rounded px-2 py-1.5 text-xs text-dt-text focus:border-[var(--dt-focus)] focus:outline-none transition-colors disabled:opacity-50"
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder={placeholder}
               aria-label={placeholder || title}
               autoComplete="off"
               spellCheck="false"
+              disabled={submitting}
             />
           )}
         </div>
@@ -149,20 +173,22 @@ export function Modal({ isOpen, title, message, inputValue = '', placeholder, ty
           {type !== 'alert' && (
             <button
               onClick={onCancel}
-              className="px-3 py-1.5 rounded text-xs text-dt-text border border-dt-border hover:bg-dt-hover transition-colors"
+              disabled={submitting}
+              className="px-3 py-1.5 rounded text-xs text-dt-text border border-dt-border hover:bg-dt-hover transition-colors disabled:opacity-40 disabled:pointer-events-none"
             >
               Cancel
             </button>
           )}
           <button
-            onClick={() => onConfirm(value)}
-            className={`px-3 py-1.5 rounded text-xs text-white transition-colors ${
+            onClick={submit}
+            disabled={submitting}
+            className={`px-3 py-1.5 rounded text-xs text-white transition-colors disabled:opacity-60 disabled:pointer-events-none ${
               danger
                 ? 'bg-red-600 hover:bg-red-500'
                 : 'bg-blue-600 hover:bg-blue-500'
             }`}
           >
-            {type === 'alert' ? 'OK' : danger ? 'Delete' : 'Confirm'}
+            {submitting ? 'Working…' : type === 'alert' ? 'OK' : danger ? 'Delete' : 'Confirm'}
           </button>
         </div>
       </div>

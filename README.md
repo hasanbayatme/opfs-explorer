@@ -140,7 +140,12 @@ src/
 *   `npm run build`: specific build for Chrome Extension (generates `dist/`).
 *   `npm run package`: Zips the `dist` folder for release.
 
-## 🔒 Privacy & Security
+## �️ Troubleshooting
+
+*   **A file or folder can't be deleted, renamed, or opened, and shows an error like "A requested file or directory could not be found":** This is a corrupted/"ghost" OPFS entry — it still appears in its parent folder's listing, but the browser can no longer resolve it directly. It's usually caused by an operation (create/rename/delete) being interrupted, for example while the inspected page was paused at a debugger breakpoint. As of v0.1.3, **Delete** automatically detects and repairs these entries before removing them, so simply try deleting the stuck item again. If it's still stuck, reloading the inspected page and retrying usually resolves it.
+*   **The file tree looks broken or shows duplicate-looking entries:** This can happen if OPFS itself contains two entries with the same name (a symptom of the corruption above). Deleting the duplicate(s) via the extension (see above) resolves it.
+
+## �🔒 Privacy & Security
 
 *   **Local Execution:** This extension runs entirely within your browser's local sandbox.
 *   **No Data Collection:** No telemetry, analytics, or file data is ever sent to external servers.
@@ -151,4 +156,4 @@ src/
 
 ## 📄 License
 
-MIT License © [Hasan Bayat](https://github.com/hasanbayat)
+MIT License © [Hasan Bayat](https://github.com/hasanbayatme)

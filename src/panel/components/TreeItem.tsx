@@ -65,8 +65,19 @@ export function TreeItem({
       try {
         const files = await opfsApi.list(entry.path);
         setChildren(files);
+        setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        const message = err instanceof Error ? err.message : String(err);
+        // A directory that appears in its parent's listing but can't itself
+        // be resolved is a corrupted/"ghost" OPFS entry (can happen after an
+        // interrupted operation, e.g. the page being paused at a debugger
+        // breakpoint). Surface a clearer, actionable message instead of the
+        // raw NotFoundError.
+        if (/not.*found/i.test(message)) {
+          setError('This folder appears to be corrupted and its contents can\'t be read. You can still delete it.');
+        } else {
+          setError(message);
+        }
       } finally {
         setLoading(false);
       }
@@ -268,9 +279,9 @@ export function TreeItem({
           {loading ? (
              <div className="pl-8 text-gray-400 italic text-[10px]" role="status">Loading...</div>
           ) : (
-            children.map(child => (
+            children.map((child, idx) => (
               <TreeItem
-                key={child.path}
+                key={`${child.path}#${idx}`}
                 entry={child}
                 depth={depth + 1}
                 onSelect={onSelect}

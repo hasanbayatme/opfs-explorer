@@ -166,8 +166,17 @@ function evalInPage<T>(code: string): Promise<T> {
     // Polling interval - Safari needs slower polling to avoid crashes
     const pollInterval = isSafari ? 100 : 10;
 
-    // Maximum polling attempts to prevent infinite loops
-    const maxAttempts = 300; // 30 seconds at 100ms, 3 seconds at 10ms
+    // Maximum polling attempts to prevent infinite loops. Use a consistent
+    // overall timeout regardless of poll interval — previously Chrome/Edge
+    // used a 10ms interval with only 300 attempts (~3s total), which is far
+    // too short: slow operations (large files, or the page being paused at a
+    // debugger breakpoint) would "time out" from the extension's point of
+    // view while the underlying page-side operation kept running. That
+    // encouraged users to retry the same action, firing a second concurrent
+    // create/rename/delete against the same OPFS entry — a likely cause of
+    // corrupted/duplicate directory entries.
+    const timeoutMs = 30000; // 30 seconds, consistent across browsers
+    const maxAttempts = Math.ceil(timeoutMs / pollInterval);
     let attempts = 0;
 
     // Wrap the async code to store result in a global variable
@@ -503,6 +512,44 @@ function __opfs_getMimeType(file) {
   return mimeMap[ext || ''] || 'application/octet-stream';
 }
 
+// Removes an entry from a directory, self-healing "ghost" entries that OPFS
+// can occasionally leave behind (e.g. after a create/move operation is
+// interrupted by the page being paused at a debugger breakpoint, or after
+// browser-level storage corruption). A ghost entry shows up when iterating
+// dirHandle.entries()/keys() but throws NotFoundError when removeEntry() is
+// called directly — the directory's index still references it, but the
+// underlying node is gone.
+//
+// The fix is to force the browser to (re)materialize a fresh, valid entry
+// with the exact same name — by calling getFileHandle/getDirectoryHandle
+// with { create: true } — which repairs the directory index, and then retry
+// the removal against that now-valid entry.
+async function __opfs_removeEntryRobust(dirHandle, name) {
+  try {
+    await dirHandle.removeEntry(name, { recursive: true });
+    return;
+  } catch (err) {
+    const isNotFound = err && (err.name === 'NotFoundError' || /not.*found/i.test(err.message || ''));
+    if (!isNotFound) throw err;
+
+    let lastErr = err;
+    for (const kind of ['directory', 'file']) {
+      try {
+        if (kind === 'directory') {
+          await dirHandle.getDirectoryHandle(name, { create: true });
+        } else {
+          await dirHandle.getFileHandle(name, { create: true });
+        }
+        await dirHandle.removeEntry(name, { recursive: true });
+        return; // Repaired and removed successfully
+      } catch (repairErr) {
+        lastErr = repairErr;
+      }
+    }
+    throw lastErr;
+  }
+}
+
 // Polyfill for recursive copy (used when move() is not supported)
 async function __opfs_copyEntry(sourceHandle, destParentHandle, newName) {
   if (sourceHandle.kind === 'file') {
@@ -834,7 +881,15 @@ export const opfsApi = {
       try {
         handle = await dirHandle.getFileHandle(oldName);
       } catch (e) {
-        handle = await dirHandle.getDirectoryHandle(oldName);
+        try {
+          handle = await dirHandle.getDirectoryHandle(oldName);
+        } catch (e2) {
+          // The entry shows up in the parent's listing but can't be resolved
+          // as a file or directory — a corrupted/orphaned "ghost" entry.
+          // Renaming it isn't meaningful (there's no real content to move),
+          // but we can still repair the directory index so it can be deleted.
+          throw new Error("This item appears to be corrupted (a known OPFS storage issue) and can't be renamed. Try deleting it instead.");
+        }
       }
 
       if ("move" in handle) {
@@ -842,7 +897,7 @@ export const opfsApi = {
       } else {
         // Polyfill for browsers that don't support move() (e.g. Firefox, Safari)
         await __opfs_copyEntry(handle, dirHandle, "${safeNewName}");
-        await dirHandle.removeEntry(oldName, { recursive: true });
+        await __opfs_removeEntryRobust(dirHandle, oldName);
       }
       return true;
     `;
@@ -885,7 +940,7 @@ export const opfsApi = {
       } else {
         // Polyfill for browsers that don't support move() (e.g. Firefox, Safari)
         await __opfs_copyEntry(handle, newDirHandle, newName);
-        await oldDirHandle.removeEntry(oldName, { recursive: true });
+        await __opfs_removeEntryRobust(oldDirHandle, oldName);
       }
       return true;
     `;
@@ -939,7 +994,7 @@ export const opfsApi = {
       const dirPath = parts.join("/");
 
       const dirHandle = await __opfs_resolvePath(dirPath);
-      await dirHandle.removeEntry(name, { recursive: true });
+      await __opfs_removeEntryRobust(dirHandle, name);
       return true;
     `;
     await evalInPage<boolean>(code);
