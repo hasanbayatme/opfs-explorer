@@ -30,16 +30,10 @@ export function Modal({ isOpen, title, message, inputValue = '', placeholder, ty
     }
   }, [isOpen]);
 
-  // Reset the submission guard whenever the modal is (re)opened, since the
-  // caller may reuse the same Modal instance for a subsequent action.
-  useEffect(() => {
-    if (isOpen) setSubmitting(false);
-  }, [isOpen]);
-
-  // Sync input value when inputValue prop changes
-  useEffect(() => {
-    setValue(inputValue);
-  }, [inputValue]);
+  // Note: `submitting` and `value` are intentionally initialized from props
+  // above (rather than reset via effects) because the caller remounts this
+  // component with a fresh `key` whenever the modal opens/closes, so a new
+  // instance and therefore fresh initial state is created automatically.
 
   // Guards against duplicate confirmations: if the page is slow to respond
   // (e.g. paused at a debugger breakpoint) a user may press Enter or click

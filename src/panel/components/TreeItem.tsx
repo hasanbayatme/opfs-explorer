@@ -85,6 +85,10 @@ export function TreeItem({
 
   useEffect(() => {
       if (expanded) {
+          // Intentional fetch-on-expand: loads this directory's children from
+          // OPFS when the tree node is expanded (or refreshed). This is the
+          // standard "fetch data in an effect" pattern.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           fetchChildren();
       }
   }, [expanded, refreshTrigger, fetchChildren]);

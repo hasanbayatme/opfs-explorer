@@ -128,13 +128,13 @@ function App() {
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
+  const dismissToast = useCallback((id: string) => setToasts(prev => prev.filter(t => t.id !== id)), []);
+
   const addToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
       const id = Math.random().toString(36).substring(7);
       setToasts(prev => [...prev, { id, type, message }]);
       setTimeout(() => dismissToast(id), 5000);
-  }, []);
-
-  const dismissToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id));
+  }, [dismissToast]);
 
   // Save sidebar width to localStorage
   const handleSidebarResize = useCallback((width: number) => {
@@ -212,6 +212,9 @@ function App() {
   }, [fetchStorageEstimate]);
 
   useEffect(() => {
+    // Intentional fetch-on-mount: loads the root OPFS listing once when the
+    // panel first mounts (the standard "fetch data in an effect" pattern).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, [refresh]);
 
@@ -696,7 +699,8 @@ function App() {
       try {
         const exists = await opfsApi.exists(filePath);
         if (exists) {
-          setPendingUploads(prev => [...prev, ...uploadsToProcess]);
+          const alreadyQueued = [...uploadsToProcess];
+          setPendingUploads(prev => [...prev, ...alreadyQueued]);
           setUploadConflict({ file, targetPath, existingPath: filePath });
           return;
         }
