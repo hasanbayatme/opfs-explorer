@@ -30,6 +30,10 @@ This extension bridges that gap by adding a native "OPFS Explorer" panel to your
 *   **📑 Markdown Preview:** Preview markdown files with rendered formatting. Toggle between preview and edit modes.
 *   **🔍 Search & Filter:** Quickly find files with Ctrl+F search functionality.
 *   **📊 Storage Statistics:** View OPFS storage usage with a visual progress bar showing used/available space.
+*   **🧮 On-Demand Directory Sizes:** Right-click any folder to calculate its size, either just its own files or the full recursive tree, without scanning automatically, so large trees stay fast. Results are cached and shown as a badge next to the folder, a settings toggle can enable automatic calculation on expand if you prefer.
+*   **🪄 JSON Formatting:** A one-click "Format" button reformats JSON files with configurable indentation (2 spaces, 4 spaces, or tabs) and optional recursive key sorting.
+*   **⚙️ Settings Panel:** Configure JSON formatting defaults and directory-size auto-calculation behavior from a dedicated settings dialog, accessible from the Explorer toolbar.
+*   **📄 Duplicate & Collapse All:** Duplicate any file or folder in place (`name copy`, `name copy 2`, …), or collapse the entire tree back to its root with one click.
 *   **✅ Multi-Selection:**
     *   **Ctrl+Click** to toggle individual items.
     *   **Shift+Click** to select a range.
@@ -129,23 +133,33 @@ This project is built with a modern, type-safe stack:
 src/
 ├── devtools/     # Entry point for creating the DevTools panel
 ├── panel/        # Main React application (UI)
-│   ├── components/  # TreeItem, Editor, Modal, etc.
+│   ├── components/  # TreeItem, Editor, Modal, SettingsPanel, etc.
 │   └── api.ts       # OPFS operations via inspectedWindow.eval()
 ├── test/         # Unit tests
 └── types.ts      # TypeScript type definitions
+scripts/          # Build, packaging, and release automation (see RELEASE.md)
 ```
 
 ### Commands
-*   `npm run dev`: Start Vite in watch mode (useful for UI dev).
-*   `npm run build`: specific build for Chrome Extension (generates `dist/`).
-*   `npm run package`: Zips the `dist` folder for release.
+*   `npm run dev`: Start Vite in watch mode. Thanks to a standalone OPFS fallback in `api.ts`, the panel is fully testable in a regular browser tab at `http://localhost:5173`, no extension install required.
+*   `npm run build`: Production build for the browser extension (generates `dist/`).
+*   `npm run lint`: Run ESLint.
+*   `npm test`: Run the unit test suite (Vitest).
+*   `npm run package`: Builds the Chromium, Firefox, and source zips into `releases/`.
+*   `npm run package:safari`: Generates the Xcode project for Safari distribution.
+*   `npm run screenshots` / `npm run promo` / `npm run assets`: Regenerate store screenshots, promo tiles/icons, or both.
+*   `npm run release`: Interactive release wizard, bumps the version, updates the changelog, regenerates assets, packages store zips, and pushes the release.
 
-## �️ Troubleshooting
+## 🚢 Releasing & Publishing
 
-*   **A file or folder can't be deleted, renamed, or opened, and shows an error like "A requested file or directory could not be found":** This is a corrupted/"ghost" OPFS entry — it still appears in its parent folder's listing, but the browser can no longer resolve it directly. It's usually caused by an operation (create/rename/delete) being interrupted, for example while the inspected page was paused at a debugger breakpoint. As of v0.1.3, **Delete** automatically detects and repairs these entries before removing them, so simply try deleting the stuck item again. If it's still stuck, reloading the inspected page and retrying usually resolves it.
+See [RELEASE.md](RELEASE.md) for the release workflow (including automated screenshot generation) and [PUBLISHING.md](PUBLISHING.md) for store-by-store submission instructions.
+
+## 🛠️ Troubleshooting
+
+*   **A file or folder can't be deleted, renamed, or opened, and shows an error like "A requested file or directory could not be found":** This is a corrupted/"ghost" OPFS entry, it still appears in its parent folder's listing, but the browser can no longer resolve it directly. It's usually caused by an operation (create/rename/delete) being interrupted, for example while the inspected page was paused at a debugger breakpoint. As of v0.1.3, **Delete** automatically detects and repairs these entries before removing them, so simply try deleting the stuck item again. If it's still stuck, reloading the inspected page and retrying usually resolves it.
 *   **The file tree looks broken or shows duplicate-looking entries:** This can happen if OPFS itself contains two entries with the same name (a symptom of the corruption above). Deleting the duplicate(s) via the extension (see above) resolves it.
 
-## �🔒 Privacy & Security
+## 🔒 Privacy & Security
 
 *   **Local Execution:** This extension runs entirely within your browser's local sandbox.
 *   **No Data Collection:** No telemetry, analytics, or file data is ever sent to external servers.

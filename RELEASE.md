@@ -1,9 +1,9 @@
 # Release Workflow
 
 This project uses an automated release workflow via GitHub Actions, plus a
-local wizard that handles nearly everything else such as quality checks, the
+local wizard that handles nearly everything else, quality checks, the
 version bump, the changelog, store screenshots/promo art, and the
-store-upload zips in one run.
+store-upload zips, in one run.
 
 ## 🚀 The Easy Way (Interactive Script)
 
@@ -48,8 +48,8 @@ npm run release   # or: ./scripts/release.sh
 regenerates promo tiles/icons first) drives a real headless Chromium instance
 against the built `dist/panel.html`, seeds a realistic fixture file tree
 directly into that page's own OPFS, and walks through the app, opening
-files, formatting JSON, calculating a folder's size, opening Settings, etc,
-capturing a PNG at each step into `screenshots/`.
+files, formatting JSON, calculating a folder's size, opening Settings, and
+more, capturing a PNG at each step into `screenshots/`.
 
 This works standalone (no browser extension host required) because `api.ts`
 falls back to running OPFS operations directly against the current page when

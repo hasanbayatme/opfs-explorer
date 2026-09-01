@@ -1,4 +1,4 @@
-# Browser Extension Store Listing - OPFS Explorer v0.1.0
+# Browser Extension Store Listing - OPFS Explorer v0.2.0
 
 ## Published Store Links
 
@@ -27,14 +27,15 @@ Inspect, edit, and manage Origin Private File System (OPFS) files directly in Ch
 ```
 OPFS Explorer - The Missing DevTools Panel for Origin Private File System
 
+GitHub: https://github.com/hasanbayatme/opfs-explorer
+
 The Origin Private File System (OPFS) is a powerful browser API for high-performance file storage, but browsers don't provide any way to see what's inside. OPFS Explorer fills this gap by adding a dedicated panel to Chrome DevTools.
 
-WHAT'S NEW IN v0.1.0:
-• Multi-Selection - Ctrl+Click, Shift+Click, Ctrl+A with bulk operations
-• Keyboard Shortcuts - Ctrl+N new file, F2 rename, Delete, arrow navigation, and more
-• Full Accessibility (WCAG 2.1 AA) - Screen reader support, focus management, reduced motion
-• Enhanced Context Menus - Icons, shortcut hints, type-ahead search
-• Improved Tree Navigation - Roving tabindex, skip navigation, ARIA live announcements
+WHAT'S NEW IN v0.2.0:
+• JSON Formatting - One-click "Format" button with configurable indentation and key sorting
+• On-Demand Directory Sizes - Calculate a folder's own size or its full recursive size, right from the context menu
+• Settings Panel - Configure JSON formatting and directory-size behavior
+• Duplicate & Collapse All - Duplicate any file/folder in place, or collapse the whole tree in one click
 
 SECURITY HIGHLIGHTS:
 • NO host permissions - doesn't access any websites
@@ -44,14 +45,17 @@ SECURITY HIGHLIGHTS:
 
 KEY FEATURES:
 📂 Visual File Tree - Browse directories with file sizes and type icons
-📝 Code Editor - Syntax highlighting for JSON, JS, TS, HTML, CSS
+📝 Code Editor - Syntax highlighting for JSON, JS, TS, HTML, CSS, and more
+🧮 On-Demand Directory Sizes - Calculate a folder's own size or its full recursive size
+� JSON Formatting - One-click reformatting with configurable indentation and key sorting
 🖼️ Image Preview - Zoom, rotate, and inspect images up to 5MB
 📑 Markdown Support - Preview or edit .md files
 ✅ Multi-Selection - Ctrl+Click, Shift+Click, Ctrl+A with bulk delete/download
 🖱️ Drag & Drop - Upload files or reorganize your file structure (multi-drag)
-⚡ Full CRUD - Create, rename, move, and delete files/folders
+⚡ Full CRUD - Create, rename, duplicate, move, and delete files/folders
 ⬇️ Download Files - Export from OPFS to your local machine
 📊 Storage Stats - Monitor your OPFS quota usage
+⚙️ Settings Panel - Configure JSON formatting and directory-size behavior
 ⌨️ Keyboard Shortcuts - 20+ shortcuts with platform-aware hints in context menus
 🌗 Theme Support - Adapts to DevTools light/dark themes
 ♿ Fully Accessible - WCAG 2.1 AA with screen reader, keyboard, and high contrast support
@@ -93,6 +97,41 @@ English
 
 ```
 OPFS, Origin Private File System, DevTools, File System, SQLite, Wasm, PWA, Storage, Developer Tools, File Manager, Debug
+```
+
+---
+
+## What's New (Version Notes for v0.2.0)
+
+```
+v0.2.0 - JSON Formatting, Directory Sizes & Settings Panel
+
+JSON FORMATTING:
+• One-click "Format" button in the editor toolbar for .json files
+• Configurable indentation (2 spaces, 4 spaces, or tabs)
+• Optional recursive alphabetical key sorting
+• Invalid JSON shows a toast instead of corrupting the buffer
+
+ON-DEMAND DIRECTORY SIZES:
+• "Calculate Size (This Folder Only)" - direct child files, fast
+• "Calculate Size (Recursive)" - full recursive tree total
+• "Calculate Total Size" for an arbitrary multi-selection
+• Results cached and shown as a badge next to the folder
+• Never runs automatically unless explicitly enabled in Settings
+
+SETTINGS PANEL:
+• New gear icon in the Explorer toolbar
+• Configure JSON formatting defaults
+• Configure directory-size auto-calculate behavior
+
+QUALITY OF LIFE:
+• Duplicate action for files and folders
+• Collapse All button to reset the tree in one click
+
+This release focuses on making large OPFS trees easier to reason about
+(on-demand sizing instead of always-on scanning) and on faster JSON
+editing, while keeping every new feature off-by-default where it could
+affect performance.
 ```
 
 ---
@@ -168,12 +207,17 @@ This extension requires NO host permissions. It does not declare `<all_urls>` or
 
 ## Screenshots Needed
 
-1. **Main Interface** - Show the file tree with some files/folders expanded, demonstrating the editor view
-2. **Image Preview** - Show an image being previewed with zoom controls visible
-3. **Markdown Preview** - Show a markdown file in preview mode with formatting
-4. **Context Menu** - Show right-click menu with options
-5. **Drag & Drop** - Show the upload overlay when dragging files
-6. **Storage Stats** - Show the storage usage bar in the sidebar footer
+Generated automatically by `npm run screenshots` (see [RELEASE.md](RELEASE.md#-automated-screenshots)) into `screenshots/`:
+
+1. **01-welcome-screen.png** - File tree populated with sample files/folders
+2. **02-file-editor.png** - Plain-text file open in the code editor
+3. **03-markdown-preview.png** - Markdown file rendered in preview mode
+4. **04-json-format.png** - JSON file after using the "Format" button
+5. **05-context-menu.png** - Right-click context menu on a file
+6. **06-folder-size.png** - Folder with an on-demand recursive size badge
+7. **07-settings-panel.png** - Settings dialog (JSON formatting + directory-size options)
+8. **08-keyboard-shortcuts.png** - Keyboard shortcuts panel
+9. **09-search-filter.png** - Search/filter in action
 
 Recommended screenshot size: 1280x800 or 640x400
 

@@ -13,7 +13,12 @@ Thank you for your interest in contributing! We welcome bug reports, feature req
     ```bash
     npm run dev
     ```
-    *Note: Since this is a DevTools extension, full testing requires loading the `dist` folder into Chrome.*
+    Thanks to a standalone OPFS fallback in `api.ts`, the panel works directly
+    in a regular browser tab at `http://localhost:5173` when no DevTools host
+    is present, so you can iterate on the UI without loading the unpacked
+    extension for most changes. Loading the `dist` folder into Chrome is
+    still recommended before submitting a PR that touches `chrome.devtools`
+    integration.
 
 4.  **Build for Chrome:**
     ```bash
@@ -23,9 +28,10 @@ Thank you for your interest in contributing! We welcome bug reports, feature req
 
 ## Code Style
 *   This project uses **React 19**, **TypeScript**, and **Tailwind CSS v4**.
-*   Please ensure your code passes linting before submitting:
+*   Please ensure your code passes linting and the test suite before submitting:
     ```bash
     npm run lint
+    npm test
     ```
 
 ## Submitting a Pull Request

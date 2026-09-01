@@ -1,6 +1,6 @@
 # Privacy Policy for OPFS Explorer
 
-**Last Updated:** February 11, 2026
+**Last Updated:** September 1, 2026
 
 This Privacy Policy describes how **OPFS Explorer** ("we", "us", or "our") handles your information when you use our browser extension.
 
@@ -10,6 +10,7 @@ This Privacy Policy describes how **OPFS Explorer** ("we", "us", or "our") handl
 *   **Local Processing:** The extension operates entirely locally within your browser's Developer Tools environment.
 *   **No Analytics:** We do not use any third-party analytics services to track your usage.
 *   **No Remote Servers:** The extension does not communicate with any external servers. All file operations (reading, writing, listing) happen directly on your device between the extension and the specific web page you are inspecting.
+*   **Local Preferences Only:** UI preferences such as sidebar width, JSON formatting defaults, and directory-size calculation settings are stored using your browser's local storage. This data never leaves your device and is not accessible to us.
 
 ## 2. Permissions
 To function correctly, OPFS Explorer requires a single permission:
