@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { opfsApi, type StorageEstimate, type FileReadResult } from './api';
+import { opfsApi, type StorageEstimate, type FileReadResult, type AppSettings, type DirectorySizeResult } from './api';
 import type { FileEntry } from './api';
 import { TreeItem } from './components/TreeItem';
 import { ContextMenu } from './components/ContextMenu';
@@ -9,13 +9,28 @@ import { ImagePreview } from './components/ImagePreview';
 import { MarkdownPreview } from './components/MarkdownPreview';
 import { ResizeHandle } from './components/ResizeHandle';
 import { Modal } from './components/Modal';
+import { SettingsPanel } from './components/SettingsPanel';
 import { ToastContainer } from './components/Toast';
 import type { ToastMessage } from './components/Toast';
 import {
   RefreshCw, Save, FolderPlus, FilePlus, Home, ChevronRight, AlertCircle, Download,
   Search, X, Keyboard, HardDrive, Trash2, PanelLeftClose, PanelLeft, Eye, Code,
-  FileText, Image as ImageIcon, Folder, Copy, Edit3
+  FileText, Image as ImageIcon, Folder, Copy, Edit3, Braces, Settings as SettingsIcon,
+  CopyPlus, Ruler, ChevronsDownUp
 } from 'lucide-react';
+
+const SETTINGS_STORAGE_KEY = 'opfs-settings';
+const DEFAULT_SETTINGS: AppSettings = { jsonIndent: 2, jsonSortKeys: false, autoDirSize: 'off' };
+
+function loadSettings(): AppSettings {
+  try {
+    const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+  } catch {
+    // Ignore malformed/missing settings - fall back to defaults
+  }
+  return DEFAULT_SETTINGS;
+}
 
 // Helper to format file sizes
 function formatFileSize(bytes: number): string {
@@ -35,6 +50,32 @@ function isImageFile(fileName: string): boolean {
 // Helper to check if file is markdown
 function isMarkdownFile(fileName: string): boolean {
   return fileName.toLowerCase().endsWith('.md') || fileName.toLowerCase().endsWith('.markdown');
+}
+
+// Helper to check if file is JSON
+function isJsonFile(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith('.json');
+}
+
+// Recursively sorts object keys alphabetically (arrays and primitives pass through unchanged)
+function sortObjectKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortObjectKeysDeep);
+  if (value !== null && typeof value === 'object') {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      sorted[key] = sortObjectKeysDeep((value as Record<string, unknown>)[key]);
+    }
+    return sorted;
+  }
+  return value;
+}
+
+// Formats a JSON string using the given settings. Throws if content isn't valid JSON.
+function formatJsonContent(content: string, settings: AppSettings): string {
+  const parsed = JSON.parse(content);
+  const data = settings.jsonSortKeys ? sortObjectKeysDeep(parsed) : parsed;
+  const indent = settings.jsonIndent === 'tab' ? '\t' : settings.jsonIndent;
+  return JSON.stringify(data, null, indent);
 }
 
 // Platform-aware modifier key label
@@ -84,6 +125,24 @@ function App() {
 
   // Keyboard shortcuts panel
   const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // App settings (JSON formatting, directory size auto-calc)
+  const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const updateSettings = useCallback((next: AppSettings) => {
+    setSettings(next);
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Ignore - localStorage may be unavailable (e.g. private browsing)
+    }
+  }, []);
+
+  // On-demand directory sizes (never computed automatically unless the user
+  // enables auto-calculate in settings), keyed by path.
+  const [directorySizes, setDirectorySizes] = useState<Map<string, DirectorySizeResult>>(new Map());
+  const [calculatingSizes, setCalculatingSizes] = useState<Set<string>>(new Set());
 
   // Upload conflict state
   const [uploadConflict, setUploadConflict] = useState<{
@@ -155,6 +214,11 @@ function App() {
     });
   }, []);
 
+  // Collapse every expanded folder in the tree
+  const handleCollapseAll = useCallback(() => {
+    setExpandedPaths(new Set());
+  }, []);
+
   // Navigate to a folder via breadcrumb
   const handleBreadcrumbNavigate = useCallback(async (targetPath: string) => {
     const parts = targetPath.split('/');
@@ -194,6 +258,10 @@ function App() {
     setIsLoading(true);
     setError(null);
     setConnectionError(false);
+    // Cached folder sizes may be stale after a refresh (files could have
+    // changed on disk), so drop them, they'll be recomputed on demand.
+    setDirectorySizes(new Map());
+    setCalculatingSizes(new Set());
     try {
       const files = await opfsApi.list('');
       setRootFiles(files);
@@ -217,6 +285,50 @@ function App() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, [refresh]);
+
+  // ============================================================
+  // Directory size calculation (on-demand)
+  // ============================================================
+
+  const handleCalculateSize = useCallback(async (path: string, recursive: boolean) => {
+    setCalculatingSizes(prev => new Set(prev).add(path));
+    try {
+      const result = await opfsApi.getDirectorySize(path, recursive);
+      setDirectorySizes(prev => {
+        const next = new Map(prev);
+        next.set(path, result);
+        return next;
+      });
+    } catch (err) {
+      addToast('error', `Failed to calculate size: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setCalculatingSizes(prev => {
+        const next = new Set(prev);
+        next.delete(path);
+        return next;
+      });
+    }
+  }, [addToast]);
+
+  const handleCalculateSelectionSize = useCallback(async () => {
+    const paths = [...selectedPaths];
+    if (paths.length === 0) return;
+    let totalSize = 0, totalFiles = 0, totalFolders = 0, failures = 0;
+    for (const path of paths) {
+      try {
+        const info = await opfsApi.getEntrySize(path);
+        totalSize += info.size;
+        totalFiles += info.fileCount;
+        totalFolders += info.folderCount;
+      } catch {
+        failures++;
+      }
+    }
+    if (failures > 0) {
+      addToast('error', `Could not compute size for ${failures} item${failures > 1 ? 's' : ''}`);
+    }
+    addToast('info', `Total: ${formatFileSize(totalSize)} (${totalFiles} file${totalFiles !== 1 ? 's' : ''}, ${totalFolders} folder${totalFolders !== 1 ? 's' : ''})`);
+  }, [selectedPaths, addToast]);
 
   // Filter files based on search query
   const filteredFiles = useMemo(() => {
@@ -383,6 +495,15 @@ function App() {
     }
   }, [primaryFile, fileContent, fileMeta, addToast, announce]);
 
+  const handleFormatJson = useCallback(() => {
+    try {
+      setFileContent(prev => formatJsonContent(prev, settings));
+      announce('JSON formatted');
+    } catch (err) {
+      addToast('error', `Invalid JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [settings, addToast, announce]);
+
   const handleDeleteSelected = useCallback(() => {
     if (selectedPaths.size === 0) return;
     const count = selectedPaths.size;
@@ -465,6 +586,17 @@ function App() {
         setModal(prev => ({ ...prev, isOpen: false }));
       }
     });
+  }, [addToast, refresh, announce]);
+
+  const handleDuplicate = useCallback(async (entry: FileEntry) => {
+    try {
+      const newPath = await opfsApi.duplicate(entry.path);
+      refresh();
+      announce(`Duplicated as ${newPath.split('/').pop()}`);
+      addToast('success', `Duplicated "${entry.name}"`);
+    } catch (err) {
+      addToast('error', `Duplicate failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }, [addToast, refresh, announce]);
 
   const handleRootCreate = useCallback(async (kind: 'file' | 'directory') => {
@@ -812,6 +944,11 @@ function App() {
             .catch(() => addToast('error', 'Failed to copy paths'));
         }
       });
+      items.push({
+        label: 'Calculate Total Size',
+        icon: <Ruler size={12} />,
+        onClick: () => handleCalculateSelectionSize()
+      });
     } else {
       // Single item context menu
       if (entry.kind === 'directory') {
@@ -865,6 +1002,16 @@ function App() {
             });
           }
         });
+        items.push({
+          label: 'Calculate Size (This Folder Only)',
+          icon: <Ruler size={12} />,
+          onClick: () => handleCalculateSize(entry.path, false)
+        });
+        items.push({
+          label: 'Calculate Size (Recursive)',
+          icon: <Ruler size={12} />,
+          onClick: () => handleCalculateSize(entry.path, true)
+        });
       }
 
       if (entry.kind === 'file') {
@@ -880,6 +1027,11 @@ function App() {
         icon: <Edit3 size={12} />,
         shortcut: 'F2',
         onClick: () => handleRename(entry)
+      });
+      items.push({
+        label: 'Duplicate',
+        icon: <CopyPlus size={12} />,
+        onClick: () => handleDuplicate(entry)
       });
       items.push({
         label: 'Copy Path',
@@ -929,7 +1081,8 @@ function App() {
     }
 
     setContextMenu({ x: e.clientX, y: e.clientY, items });
-  }, [selectedPaths, primaryFile, addToast, handleDownload, handleDownloadSelected, handleDeleteSelected, handleRename, refresh, announce]);
+  }, [selectedPaths, primaryFile, addToast, handleDownload, handleDownloadSelected, handleDeleteSelected,
+      handleRename, handleDuplicate, handleCalculateSize, handleCalculateSelectionSize, refresh, announce]);
 
 
   // ============================================================
@@ -939,6 +1092,7 @@ function App() {
   const hasUnsavedChanges = fileContent !== initialContent && primaryFile?.kind === 'file';
   const isImage = primaryFile && isImageFile(primaryFile.name);
   const isMarkdown = primaryFile && isMarkdownFile(primaryFile.name);
+  const isJson = primaryFile && isJsonFile(primaryFile.name);
   // [UNKNOWN_TYPE] is handled separately (disambiguation screen) — not treated as too-large
   const isTooLarge =
     fileContent.startsWith('[TOO_LARGE]') ||
@@ -1095,6 +1249,14 @@ function App() {
         </div>
       )}
 
+      {showSettings && (
+        <SettingsPanel
+          settings={settings}
+          onChange={updateSettings}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside
         className={`flex flex-col border-r border-dt-border bg-dt-surface select-none transition-all duration-200 ${sidebarCollapsed ? 'w-0 overflow-hidden' : ''}`}
@@ -1140,6 +1302,22 @@ function App() {
                   aria-label="Refresh file list"
                 >
                     <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} aria-hidden="true" />
+                </button>
+                <button
+                  onClick={handleCollapseAll}
+                  className="p-1 hover:bg-dt-hover rounded text-dt-text-secondary transition-colors"
+                  title="Collapse all folders"
+                  aria-label="Collapse all folders"
+                >
+                    <ChevronsDownUp size={14} aria-hidden="true" />
+                </button>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="p-1 hover:bg-dt-hover rounded text-dt-text-secondary transition-colors"
+                  title="Settings"
+                  aria-label="Open settings"
+                >
+                    <SettingsIcon size={14} aria-hidden="true" />
                 </button>
             </div>
         </div>
@@ -1239,6 +1417,10 @@ function App() {
                         expandedPaths={expandedPaths}
                         onToggleExpand={handleToggleExpand}
                         onFocusPath={handleFocusPath}
+                        directorySizes={directorySizes}
+                        calculatingSizes={calculatingSizes}
+                        autoDirSize={settings.autoDirSize}
+                        onCalculateSize={handleCalculateSize}
                     />
                 ))
             )}
@@ -1385,6 +1567,18 @@ function App() {
               </div>
             )}
 
+            {isJson && !isTooLarge && !isUnknownType && (
+              <button
+                onClick={handleFormatJson}
+                className="flex items-center px-2 py-1 rounded text-xs space-x-1 text-dt-text-secondary hover:bg-dt-hover transition-colors"
+                title="Format JSON (uses indentation/sort settings)"
+                aria-label="Format JSON"
+              >
+                <Braces size={12} aria-hidden="true" />
+                <span>Format</span>
+              </button>
+            )}
+
             {primaryFile?.kind === 'file' && !isImage && !isTooLarge && (
               <button
                 onClick={saveFile}
@@ -1397,8 +1591,7 @@ function App() {
                 <Save size={12} aria-hidden="true" />
                 <span>Save</span>
               </button>
-            )}
-            {primaryFile?.kind === 'file' && (
+            )}            {primaryFile?.kind === 'file' && (
               <button
                 onClick={() => handleDownload(primaryFile.path)}
                 className="flex items-center px-2 py-1 rounded text-xs space-x-1 text-dt-text-secondary hover:bg-dt-hover transition-colors"

@@ -69,11 +69,21 @@ Run `npm run package` to generate the following files in the `releases/` directo
 ## 📝 Store Listing Details
 
 Refer to `STORE_LISTING.md` for descriptions, screenshots, and promotional text to use across all stores.
+Screenshots and promo tiles in `screenshots/` and `public/icons/` are generated automatically,
+see [RELEASE.md § Automated Screenshots](RELEASE.md#-automated-screenshots).
 
 ## ✅ Pre-Release Checklist
 
+Running `npm run release` (see [RELEASE.md](RELEASE.md)) handles everything
+below except the two steps marked **(manual)**:
+
+- [ ] **(manual)** Write your changes under `## [Unreleased]` in `CHANGELOG.md` as you go.
 - [ ] Bump version in `package.json` and `public/manifest.json`.
-- [ ] Update `CHANGELOG.md`.
-- [ ] Run `npm run package`.
+- [ ] Promote `CHANGELOG.md`'s `[Unreleased]` section to a dated version heading.
+- [ ] Lint, type-check, test, and build pass locally.
+- [ ] Regenerate promo tiles/icons/screenshots (`npm run assets`).
+- [ ] Run `npm run package` to produce the store-upload zips.
 - [ ] Test the build in at least Chrome and Firefox (load unpacked).
 - [ ] Verify `move` and `rename` functionality in Firefox (uses polyfill).
+- [ ] **(manual)** Upload the generated zips to each store dashboard.
+

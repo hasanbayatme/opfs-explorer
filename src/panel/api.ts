@@ -1,5 +1,5 @@
-import type { FileEntry, StorageEstimate, FileReadResult } from "../types";
-export type { FileEntry, StorageEstimate, FileReadResult };
+import type { FileEntry, StorageEstimate, FileReadResult, DirectorySizeResult, AppSettings, AutoDirSizeMode } from "../types";
+export type { FileEntry, StorageEstimate, FileReadResult, DirectorySizeResult, AppSettings, AutoDirSizeMode };
 
 // Declare browser namespace for Safari/Firefox compatibility
 declare const browser: typeof chrome | undefined;
@@ -34,6 +34,32 @@ function getDevtools(): typeof chrome.devtools | null {
     return chrome.devtools;
   }
   return null;
+}
+
+/**
+ * Runs an OPFS operation's code string directly in the current page context
+ * instead of relaying it through `chrome.devtools.inspectedWindow.eval`.
+ *
+ * This is used as a standalone fallback when no DevTools host is available,
+ * e.g. `npm run dev`, or the screenshot/promo automation in scripts/, so the
+ * exact same OPFS_HELPERS + operation code that normally runs in the
+ * *inspected* page can instead operate on the current page's own OPFS. This
+ * makes the panel fully testable outside of an actual browser extension.
+ */
+function runLocalOpfs<T>(code: string): Promise<T> {
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
+    body: string
+  ) => () => Promise<T>;
+  const fn = new AsyncFunction(code);
+  return fn();
+}
+
+/**
+ * Whether OPFS can be exercised directly in the current page (no DevTools
+ * host required), true for any secure context that implements the OPFS API.
+ */
+function canRunOpfsLocally(): boolean {
+  return typeof navigator !== "undefined" && isSecureContext && !!navigator.storage?.getDirectory;
 }
 
 /**
@@ -153,8 +179,16 @@ function evalInPage<T>(code: string): Promise<T> {
     const devtools = getDevtools();
 
     if (!devtools) {
-      // Mock for local dev
-      console.log("[Mock eval]", code.slice(0, 100) + "...");
+      // No DevTools host (e.g. running the panel standalone via `npm run
+      // dev`, or the screenshot/promo automation), fall back to running
+      // the same operation directly against this page's own OPFS, if
+      // available, instead of failing outright.
+      if (canRunOpfsLocally()) {
+        runLocalOpfs<T>(code).then(resolve, (err) =>
+          reject(err instanceof Error ? err : new Error(String(err)))
+        );
+        return;
+      }
       reject(new Error("DevTools not available in development mode"));
       return;
     }
@@ -548,6 +582,50 @@ async function __opfs_removeEntryRobust(dirHandle, name) {
     }
     throw lastErr;
   }
+}
+
+// Finds a free "name copy", "name copy 2", ... name within a directory,
+// preserving the file extension (e.g. "notes.txt" -> "notes copy.txt").
+async function __opfs_uniqueCopyName(dirHandle, baseName) {
+  const dotIdx = baseName.lastIndexOf(".");
+  const stem = dotIdx > 0 ? baseName.slice(0, dotIdx) : baseName;
+  const ext = dotIdx > 0 ? baseName.slice(dotIdx) : "";
+  let candidate = stem + " copy" + ext;
+  let n = 2;
+  while (true) {
+    let taken = false;
+    for await (const key of dirHandle.keys()) {
+      if (key === candidate) { taken = true; break; }
+    }
+    if (!taken) return candidate;
+    candidate = stem + " copy " + n + ext;
+    n++;
+  }
+}
+
+// Recursively sums file sizes within a directory. When recurse is false,
+// only direct child files are counted, subdirectories are counted but not
+// descended into, giving a cheap "this folder alone" size.
+async function __opfs_computeDirSize(dirHandle, recurse) {
+  let size = 0, fileCount = 0, folderCount = 0;
+  for await (const [, handle] of dirHandle.entries()) {
+    if (handle.kind === "file") {
+      try {
+        const file = await handle.getFile();
+        size += file.size;
+        fileCount++;
+      } catch (e) {}
+    } else if (handle.kind === "directory") {
+      folderCount++;
+      if (recurse) {
+        const sub = await __opfs_computeDirSize(handle, true);
+        size += sub.size;
+        fileCount += sub.fileCount;
+        folderCount += sub.folderCount;
+      }
+    }
+  }
+  return { size, fileCount, folderCount };
 }
 
 // Polyfill for recursive copy (used when move() is not supported)
@@ -1091,5 +1169,89 @@ export const opfsApi = {
       }
     `;
     return evalInPage<boolean>(code);
+  },
+
+  /**
+   * Compute the total size of a directory. When `recursive` is false, only
+   * direct child files are summed (a cheap "this folder alone" size);
+   * subdirectories are counted but their contents are not descended into.
+   * This is on-demand only, never called automatically for large trees.
+   */
+  getDirectorySize: async (path: string, recursive: boolean): Promise<DirectorySizeResult> => {
+    const safePath = escapeString(path);
+    const code = `
+      ${OPFS_HELPERS}
+
+      if (!isSecureContext) throw new Error("OPFS requires a Secure Context (HTTPS or localhost).");
+      if (!navigator.storage?.getDirectory) throw new Error("OPFS API not supported in this browser.");
+
+      const dirHandle = await __opfs_resolvePath("${safePath}");
+      const result = await __opfs_computeDirSize(dirHandle, ${recursive ? "true" : "false"});
+      result.recursive = ${recursive ? "true" : "false"};
+      return result;
+    `;
+    return evalInPage<DirectorySizeResult>(code);
+  },
+
+  /**
+   * Compute the size of a single file or directory, auto-detecting which it
+   * is. Directories are always summed recursively (used by "Calculate Total
+   * Size" for an arbitrary multi-selection of files and folders).
+   */
+  getEntrySize: async (path: string): Promise<{ kind: 'file' | 'directory'; size: number; fileCount: number; folderCount: number }> => {
+    const safePath = escapeString(path);
+    const code = `
+      ${OPFS_HELPERS}
+
+      if (!isSecureContext) throw new Error("OPFS requires a Secure Context (HTTPS or localhost).");
+      if (!navigator.storage?.getDirectory) throw new Error("OPFS API not supported in this browser.");
+
+      const parts = "${safePath}".split("/");
+      const name = parts.pop();
+      const dirPath = parts.join("/");
+      const dirHandle = await __opfs_resolvePath(dirPath);
+
+      try {
+        const fileHandle = await dirHandle.getFileHandle(name);
+        const file = await fileHandle.getFile();
+        return { kind: "file", size: file.size, fileCount: 1, folderCount: 0 };
+      } catch (e) {
+        const subDirHandle = await dirHandle.getDirectoryHandle(name);
+        const result = await __opfs_computeDirSize(subDirHandle, true);
+        return { kind: "directory", size: result.size, fileCount: result.fileCount, folderCount: result.folderCount + 1 };
+      }
+    `;
+    return evalInPage<{ kind: 'file' | 'directory'; size: number; fileCount: number; folderCount: number }>(code);
+  },
+
+  /**
+   * Duplicate a file or directory within its parent folder, auto-generating
+   * a non-colliding "name copy" / "name copy 2" name.
+   */
+  duplicate: async (path: string): Promise<string> => {
+    const safePath = escapeString(path);
+    const code = `
+      ${OPFS_HELPERS}
+
+      if (!isSecureContext) throw new Error("OPFS requires a Secure Context (HTTPS or localhost).");
+      if (!navigator.storage?.getDirectory) throw new Error("OPFS API not supported in this browser.");
+
+      const parts = "${safePath}".split("/");
+      const name = parts.pop();
+      const dirPath = parts.join("/");
+      const dirHandle = await __opfs_resolvePath(dirPath);
+
+      let handle;
+      try {
+        handle = await dirHandle.getFileHandle(name);
+      } catch (e) {
+        handle = await dirHandle.getDirectoryHandle(name);
+      }
+
+      const newName = await __opfs_uniqueCopyName(dirHandle, name);
+      await __opfs_copyEntry(handle, dirHandle, newName);
+      return dirPath ? dirPath + "/" + newName : newName;
+    `;
+    return evalInPage<string>(code);
   },
 };

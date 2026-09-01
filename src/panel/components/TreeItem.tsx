@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronRight, ChevronDown, Folder, FileJson, FileCode, FileText, Image, File, FileType, Database } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FileJson, FileCode, FileText, Image, File, FileType, Database, Loader2 } from 'lucide-react';
 import { opfsApi } from '../api';
-import type { FileEntry } from '../api';
+import type { FileEntry, DirectorySizeResult, AutoDirSizeMode } from '../api';
 
 // Helper to format file sizes compactly
 function formatSize(bytes?: number): string {
@@ -25,6 +25,10 @@ interface TreeItemProps {
   expandedPaths: Set<string>;
   onToggleExpand: (path: string) => void;
   onFocusPath?: (path: string) => void;
+  directorySizes?: Map<string, DirectorySizeResult>;
+  calculatingSizes?: Set<string>;
+  autoDirSize?: AutoDirSizeMode;
+  onCalculateSize?: (path: string, recursive: boolean) => void;
 }
 
 export function TreeItem({
@@ -40,6 +44,10 @@ export function TreeItem({
   expandedPaths,
   onToggleExpand,
   onFocusPath,
+  directorySizes,
+  calculatingSizes,
+  autoDirSize = 'off',
+  onCalculateSize,
 }: TreeItemProps) {
   const [children, setChildren] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -92,6 +100,25 @@ export function TreeItem({
           fetchChildren();
       }
   }, [expanded, refreshTrigger, fetchChildren]);
+
+  // Auto-calculate folder size on expand when enabled in settings. Off by
+  // default — full recursive size computation can be expensive for large
+  // trees, so this is opt-in and always skips folders that already have a
+  // cached size (e.g. from a manual "Calculate Size" action).
+  useEffect(() => {
+    if (
+      expanded &&
+      entry.kind === 'directory' &&
+      autoDirSize !== 'off' &&
+      onCalculateSize &&
+      !directorySizes?.has(entry.path) &&
+      !calculatingSizes?.has(entry.path)
+    ) {
+      onCalculateSize(entry.path, autoDirSize === 'recursive');
+    }
+    // Only re-run when expansion state or the setting itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, autoDirSize, entry.path, entry.kind]);
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -272,6 +299,22 @@ export function TreeItem({
             {formatSize(entry.size)}
           </span>
         )}
+
+        {entry.kind === 'directory' && calculatingSizes?.has(entry.path) && (
+          <Loader2 size={9} className="ml-1 shrink-0 animate-spin text-dt-text-secondary/60" aria-hidden="true" />
+        )}
+
+        {entry.kind === 'directory' && !calculatingSizes?.has(entry.path) && directorySizes?.has(entry.path) && (() => {
+          const info = directorySizes.get(entry.path)!;
+          return (
+            <span
+              className="text-[9px] text-dt-text-secondary/60 ml-1 shrink-0 tabular-nums"
+              title={`${info.recursive ? 'Recursive' : 'This folder only'}: ${info.fileCount} file${info.fileCount !== 1 ? 's' : ''}, ${info.folderCount} folder${info.folderCount !== 1 ? 's' : ''}`}
+            >
+              {formatSize(info.size)}{!info.recursive && '*'}
+            </span>
+          );
+        })()}
       </div>
 
       {error && expanded && (
@@ -298,6 +341,10 @@ export function TreeItem({
                 expandedPaths={expandedPaths}
                 onToggleExpand={onToggleExpand}
                 onFocusPath={onFocusPath}
+                directorySizes={directorySizes}
+                calculatingSizes={calculatingSizes}
+                autoDirSize={autoDirSize}
+                onCalculateSize={onCalculateSize}
               />
             ))
           )}

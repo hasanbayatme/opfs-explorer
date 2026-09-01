@@ -5,6 +5,23 @@ All notable changes to OPFS Explorer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **JSON formatting**: A "Format" button appears in the editor toolbar for `.json` files, reformatting the current content with configurable indentation (2 spaces, 4 spaces, or tab) and an optional recursive alphabetical key sort both configurable in the new Settings panel and persisted across sessions. Invalid JSON shows a toast instead of corrupting the buffer.
+- **On-demand directory sizes**: Right-click a folder for "Calculate Size (This Folder Only)" (direct child files only, cheap) or "Calculate Size (Recursive)" (full recursive tree total). Results are cached and shown as a compact badge next to the folder in the tree. Multi-selecting files/folders and choosing "Calculate Total Size" sums an arbitrary selection. An optional Settings toggle can auto-calculate sizes when a folder is expanded (off by default, since recursive calculation can be expensive on large trees).
+- **Settings panel**: New gear icon in the Explorer toolbar opens a settings dialog for JSON formatting defaults and the directory-size auto-calculate mode.
+- **Duplicate action**: Right-click menu now offers "Duplicate" for files and folders, creating a `name copy`/`name copy 2` sibling.
+- **Collapse All**: New toolbar button collapses every expanded folder in the tree in one click.
+- **Standalone/dev-mode OPFS support**: When no DevTools host is present (e.g. `npm run dev`, or the screenshot automation below), the panel now runs OPFS operations directly against its own page instead of failing with "DevTools not available", making the app fully testable outside of an actual browser extension install.
+- **Streamlined release process**: `npm run release` now also runs the full test suite, promotes `CHANGELOG.md`'s `[Unreleased]` section to a dated version heading automatically, regenerates promo tiles/icons/store screenshots, and builds the store-upload zips, all folded into the version-bump commit. See `RELEASE.md`.
+- **Reworked screenshot automation**: `npm run screenshots` now seeds a realistic fixture file tree directly into a real (headless) browser's OPFS and exercises the actual UI (file editing, JSON formatting, directory-size calculation, Settings panel, etc.), replacing the old script which silently produced broken/empty screenshots since it had no way to populate OPFS without a DevTools host.
+
+### Fixed
+
+- **Settings panel didn't close on Escape**: Unlike every other dialog/menu in the app, the new Settings panel had no Escape-key handler.
+
 ## [0.1.3] - 2026-07-06
 
 ### Fixed

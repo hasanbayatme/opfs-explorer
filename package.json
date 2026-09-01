@@ -21,7 +21,8 @@
     "package:safari": "bash scripts/package-safari.sh",
     "screenshots": "node scripts/screenshots.cjs",
     "promo": "node scripts/promo-tiles.cjs",
-    "assets": "npm run promo && npm run build && npm run screenshots"
+    "assets": "npm run promo && npm run build && npm run screenshots",
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",
