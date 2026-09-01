@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-01
+
 ### Added
 
 - **JSON formatting**: A "Format" button appears in the editor toolbar for `.json` files, reformatting the current content with configurable indentation (2 spaces, 4 spaces, or tab) and an optional recursive alphabetical key sort both configurable in the new Settings panel and persisted across sessions. Invalid JSON shows a toast instead of corrupting the buffer.
